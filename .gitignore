@@ -10,3 +10,7 @@ training/wandb/
 finetuned_model/
 data_processing/synthetic_dataset/
 trained_model/
+
+mining/logs
+mining/screenshots
+.DS_Store
