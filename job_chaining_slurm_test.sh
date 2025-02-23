@@ -1,6 +1,7 @@
 #!/bin/bash
 # slurm_job.sh - Submit this to SLURM on SFSU
 
+#these sbatch parameters specify the GPU Node at SFSU HPC Cluster
 #SBATCH --partition=gpucluster
 #SBATCH --qos=interactive
 #SBATCH --time=04:00:00

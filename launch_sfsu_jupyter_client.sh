@@ -1,5 +1,7 @@
 #!/bin/bash
-# launch_jupyter.sh - Run this from your local machine
+# Run this from your local machine to initiate starting the jupyter notebook
+# on the remote machine and then forwarding the port so you can access the URL
+# on localhost
 
 # Function to check if job is running
 check_job_status() {
