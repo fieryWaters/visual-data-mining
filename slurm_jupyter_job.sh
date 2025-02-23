@@ -1,6 +1,5 @@
 #!/bin/bash
 # This slurm job allows the user to start a jupyter notebook on the remote SFSU Cluster and get access to the GPUs
-
 #SBATCH --partition=gpucluster
 #SBATCH --qos=interactive
 #SBATCH --time=04:00:00
@@ -11,18 +10,33 @@
 # Activate environment
 source ~/git-repos/visual-data-mining/venv_visual_data_mining/bin/activate
 
-# Find a free port
-PORT=$(python3 -c '
-import socket
-s = socket.socket()
-s.bind(("", 0))
-print(s.getsockname()[1])
-s.close()
-')
+# Try to read previous port from jupyter_info file
+PREV_PORT=8888
+if [ -f ~/.jupyter_info ]; then
+    PREV_PORT=$(grep "^PORT=" ~/.jupyter_info | cut -d'=' -f2)
+fi
 
-# Save connection info for the client
-echo $PORT > ~/.jupyter_port
-echo $(hostname) > ~/.jupyter_node
+# Try the previous port first, then find a free one if needed
+PORT=$(python3 -c "
+import socket
+def try_port(port):
+    try:
+        s = socket.socket()
+        s.bind(('', port))
+        return port
+    except OSError:
+        s = socket.socket()
+        s.bind(('', 0))
+        return s.getsockname()[1]
+    finally:
+        s.close()
+print(try_port($PREV_PORT))
+")
+
+# Save all connection info in one file
+echo "JOB_ID=$SLURM_JOB_ID" > ~/.jupyter_info
+echo "PORT=$PORT" >> ~/.jupyter_info
+echo "NODE=$(hostname)" >> ~/.jupyter_info
 
 # Start Jupyter and save the token
-jupyter notebook --no-browser --port=$PORT --ip=0.0.0.0 2>&1 | tee ~/.jupyter_output
+jupyter notebook --no-browser --port=$PORT --ip=0.0.0.0 2>&1 | tee -a ~/.jupyter_info

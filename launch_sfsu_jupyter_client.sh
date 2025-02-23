@@ -7,42 +7,58 @@
 #    (IE the "ssh sfsu" command will log you into the cluster)
 # Also assumes you are connected to the SFSU VPN
 
-# Function to check if job is running
+# Get the status of a SLURM job (R=running, PD=pending, etc)
 check_job_status() {
     local job_id=$1
     local status=$(ssh sfsu "squeue -j $job_id -h -o %t" 2>/dev/null)
     echo $status
 }
 
-# Function to get connection details from existing job
+# Parse the jupyter_info file to get connection details
+# Returns them in format: node:port:token
 get_connection_details() {
     local job_id=$1
-    # Read from our consolidated info file
+    
+    # Get all info from the consolidated file
     local info=$(ssh sfsu "cat ~/.jupyter_info")
+    
+    # Extract each piece using 'cut':
+    # -d'=' means split at equals sign
+    # -f2 means take the second piece
     local node=$(echo "$info" | grep "^NODE=" | cut -d'=' -f2)
     local port=$(echo "$info" | grep "^PORT=" | cut -d'=' -f2)
+    
+    # Extract token using sed because it's a more complex pattern
     local token=$(echo "$info" | grep -m1 "token=" | sed -n 's/.*token=\([^&]*\).*/\1/p')
+    
     echo "$node:$port:$token"
 }
 
 # Check for existing job
 echo "Checking for existing Jupyter session..."
+
+# Get job ID from the info file, suppressing any errors with 2>/dev/null
 EXISTING_JOB_ID=$(ssh sfsu "grep '^JOB_ID=' ~/.jupyter_info 2>/dev/null | cut -d'=' -f2")
 EXISTING_STATUS=""
+
 if [ ! -z "$EXISTING_JOB_ID" ]; then
     EXISTING_STATUS=$(check_job_status $EXISTING_JOB_ID)
 fi
 
 if [ "$EXISTING_STATUS" == "R" ]; then
     echo "Found running Jupyter session, reconnecting..."
+    
     # Get connection details from existing session
     CONNECTION_INFO=$(get_connection_details $EXISTING_JOB_ID)
+    
+    # Split CONNECTION_INFO at colons into node, port, token
     NODE=$(echo $CONNECTION_INFO | cut -d':' -f1)
     PORT=$(echo $CONNECTION_INFO | cut -d':' -f2)
     TOKEN=$(echo $CONNECTION_INFO | cut -d':' -f3)
 else
     echo "No active session found. Starting new Jupyter job..."
-    # Submit new job
+    
+    # Submit new job - awk '{print $4}' extracts just the job ID from SLURM output
     JOB_ID=$(ssh sfsu "sbatch ~/git-repos/visual-data-mining/slurm_jupyter_job.sh" | awk '{print $4}') || exit 1
     echo "Submitted job ID: $JOB_ID"
     
@@ -72,10 +88,8 @@ fi
 
 # Display connection information
 echo -e "\nJupyter is running!"
-echo "Node: $NODE"
-echo "Port: $PORT"
 echo -e "\nConnection URLs:"
-echo "Local machine URL: http://localhost:$PORT/?token=$TOKEN"
+echo "Local machine URL: "
 echo "http://localhost:$PORT/?token=$TOKEN"
 echo -e "\nVSCode remote development URL:"
 echo "http://$NODE:$PORT/?token=$TOKEN"
@@ -86,18 +100,6 @@ echo "Check status: ssh sfsu \"squeue -j $EXISTING_JOB_ID\""
 echo "View logs:    ssh sfsu \"cat jupyter_${EXISTING_JOB_ID}.log\""
 echo "Kill job:     ssh sfsu \"scancel $EXISTING_JOB_ID\""
 
-# Establish SSH tunnel
+# Set up SSH tunnel - will exit immediately on Ctrl+C
 echo -e "\nEstablishing SSH tunnel (keep this terminal open)..."
-max_retries=5
-retry_count=0
-while [ $retry_count -lt $max_retries ]; do
-    if ssh -N -L "$PORT:$NODE:$PORT" sfsu; then
-        break
-    fi
-    if [ $? -eq 130 ]; then  # Ctrl+C was pressed
-        break
-    fi
-    echo "Connection failed, retrying in 3 seconds..."
-    sleep 3
-    retry_count=$((retry_count + 1))
-done
+ssh -N -L "$PORT:$NODE:$PORT" sfsu
