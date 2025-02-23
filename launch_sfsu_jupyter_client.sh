@@ -2,6 +2,10 @@
 # Run this from your local machine to initiate starting the jupyter notebook
 # on the remote machine and then forwarding the port so you can access the URL
 # on localhost
+# IMPORTANT
+# this script assumes you already have ssh keys setup 
+#    (IE the "ssh sfsu" command will log you into the cluster)
+# Also assumes you are connected to the SFSU VPN
 
 # Function to check if job is running
 check_job_status() {
@@ -10,63 +14,80 @@ check_job_status() {
     echo $status
 }
 
-echo "Submitting Jupyter job to SLURM..."
-JOB_ID=$(ssh sfsu "sbatch ~/git-repos/visual-data-mining/slurm_jupyter_job.sh" | awk '{print $4}') || exit 1
-echo "Submitted job ID: $JOB_ID"
-echo "Waiting for job to start..."
+# Function to get connection details from existing job
+get_connection_details() {
+    local job_id=$1
+    # Read from our consolidated info file
+    local info=$(ssh sfsu "cat ~/.jupyter_info")
+    local node=$(echo "$info" | grep "^NODE=" | cut -d'=' -f2)
+    local port=$(echo "$info" | grep "^PORT=" | cut -d'=' -f2)
+    local token=$(echo "$info" | grep -m1 "token=" | sed -n 's/.*token=\([^&]*\).*/\1/p')
+    echo "$node:$port:$token"
+}
 
-# Wait for job to be running
-while true; do
-    status=$(check_job_status $JOB_ID)
-    if [ "$status" == "R" ]; then
-        echo "Job is running!"
-        break
-    elif [ -z "$status" ]; then
-        echo "Job failed to start. Check jupyter_${JOB_ID}.log on SFSU"
-        exit 1
-    fi
-    echo "Job status: $status (waiting for R)"
-    sleep 3
-done
+# Check for existing job
+echo "Checking for existing Jupyter session..."
+EXISTING_JOB_ID=$(ssh sfsu "grep '^JOB_ID=' ~/.jupyter_info 2>/dev/null | cut -d'=' -f2")
+EXISTING_STATUS=""
+if [ ! -z "$EXISTING_JOB_ID" ]; then
+    EXISTING_STATUS=$(check_job_status $EXISTING_JOB_ID)
+fi
 
-# Give Jupyter a moment to write its files
-sleep 5
-echo "Getting connection details..."
-
-# Get node and port from log file, with better parsing
-while true; do
-    LOG_LINE=$(ssh sfsu "grep -m1 'http://' jupyter_${JOB_ID}.log 2>/dev/null | grep -v 127.0.0.1")
-    if [ ! -z "$LOG_LINE" ]; then
-        NODE=$(echo "$LOG_LINE" | sed -n 's|.*http://\([^:]*\):\([0-9]*\)/.*|\1|p')
-        PORT=$(echo "$LOG_LINE" | sed -n 's|.*http://[^:]*:\([0-9]*\)/.*|\1|p')
-        if [ ! -z "$NODE" ] && [ ! -z "$PORT" ]; then
+if [ "$EXISTING_STATUS" == "R" ]; then
+    echo "Found running Jupyter session, reconnecting..."
+    # Get connection details from existing session
+    CONNECTION_INFO=$(get_connection_details $EXISTING_JOB_ID)
+    NODE=$(echo $CONNECTION_INFO | cut -d':' -f1)
+    PORT=$(echo $CONNECTION_INFO | cut -d':' -f2)
+    TOKEN=$(echo $CONNECTION_INFO | cut -d':' -f3)
+else
+    echo "No active session found. Starting new Jupyter job..."
+    # Submit new job
+    JOB_ID=$(ssh sfsu "sbatch ~/git-repos/visual-data-mining/slurm_jupyter_job.sh" | awk '{print $4}') || exit 1
+    echo "Submitted job ID: $JOB_ID"
+    
+    # Wait for job to start
+    while true; do
+        status=$(check_job_status $JOB_ID)
+        if [ "$status" == "R" ]; then
+            echo "Job is running!"
             break
+        elif [ -z "$status" ]; then
+            echo "Job failed to start. Check jupyter_${JOB_ID}.log on SFSU"
+            exit 1
         fi
-    fi
-    echo "Waiting for Jupyter to initialize..."
-    sleep 2
-done
+        echo "Job status: $status (waiting for R)"
+        sleep 3
+    done
+    
+    # Give Jupyter a moment to write its files
+    sleep 5
+    
+    # Get connection details
+    CONNECTION_INFO=$(get_connection_details $JOB_ID)
+    NODE=$(echo $CONNECTION_INFO | cut -d':' -f1)
+    PORT=$(echo $CONNECTION_INFO | cut -d':' -f2)
+    TOKEN=$(echo $CONNECTION_INFO | cut -d':' -f3)
+fi
 
-# Get the token from the log with better parsing
-TOKEN=$(ssh sfsu "grep -m1 'token=' jupyter_${JOB_ID}.log | sed -n 's/.*token=\([^&]*\).*/\1/p'")
-
+# Display connection information
 echo -e "\nJupyter is running!"
 echo "Node: $NODE"
 echo "Port: $PORT"
-
-# Display both local and remote URLs
 echo -e "\nConnection URLs:"
-echo "Local  URL: http://localhost:$PORT/?token=$TOKEN"
-echo "Remote URL: http://$NODE:$PORT/?token=$TOKEN"
+echo "Local machine URL: http://localhost:$PORT/?token=$TOKEN"
+echo "http://localhost:$PORT/?token=$TOKEN"
+echo -e "\nVSCode remote development URL:"
+echo "http://$NODE:$PORT/?token=$TOKEN"
 
+# Display job management commands
 echo -e "\nJob Management:"
-echo "Check status: ssh sfsu \"squeue -j $JOB_ID\""
-echo "View logs:    ssh sfsu \"cat jupyter_${JOB_ID}.log\""
-echo "Kill job:     ssh sfsu \"scancel $JOB_ID\""
+echo "Check status: ssh sfsu \"squeue -j $EXISTING_JOB_ID\""
+echo "View logs:    ssh sfsu \"cat jupyter_${EXISTING_JOB_ID}.log\""
+echo "Kill job:     ssh sfsu \"scancel $EXISTING_JOB_ID\""
 
+# Establish SSH tunnel
 echo -e "\nEstablishing SSH tunnel (keep this terminal open)..."
-
-# Try to establish SSH tunnel with retry
 max_retries=5
 retry_count=0
 while [ $retry_count -lt $max_retries ]; do
