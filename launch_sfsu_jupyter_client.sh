@@ -11,7 +11,7 @@ check_job_status() {
 }
 
 echo "Submitting Jupyter job to SLURM..."
-JOB_ID=$(ssh sfsu "sbatch ~/git-repos/Visual-Data-Mining-AI-Model/slurm_jupyter_job.sh" | awk '{print $4}') || exit 1
+JOB_ID=$(ssh sfsu "sbatch ~/git-repos/visual-data-mining/slurm_jupyter_job.sh" | awk '{print $4}') || exit 1
 echo "Submitted job ID: $JOB_ID"
 echo "Waiting for job to start..."
 
