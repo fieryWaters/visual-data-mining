@@ -8,7 +8,7 @@
 #SBATCH --output=jupyter_%j.log  # %j is the job ID
 
 # Activate environment
-source ~/git-repos/visual-data-mining/venv_visual_data_mining/bin/activate
+source ~/git-repos/visual-data-mining/venv/bin/activate
 
 # Try to read previous port from jupyter_info file
 PREV_PORT=8888
