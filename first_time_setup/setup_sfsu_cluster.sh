@@ -46,6 +46,7 @@ fi
 
 # Setup SSH keys
 echo -e "\n==== Setting up SSH keys ===="
+source setupSshKeysOnRemote.sh
 check_command "Failed to setup SSH keys"
 
 # Verify SSH setup
@@ -56,7 +57,6 @@ fi
 
 # Setup Github keys
 echo -e "\n==== Setting up Github keys ===="
-echo "for some reason the following script will pause sometimes until you press enter once or twice" 
 ssh sfsu "mkdir -p ~/.ssh && chmod 700 ~/.ssh"
 scp setupGithubKeys.sh sfsu:~/.ssh/
 ssh sfsu "chmod +x ~/.ssh/setupGithubKeys.sh && cd ~/.ssh && ./setupGithubKeys.sh"
