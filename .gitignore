@@ -11,6 +11,11 @@ finetuned_model/
 data_processing/synthetic_dataset/
 trained_model/
 
-mining/logs
-mining/screenshots
+mining/logs/
+mining/screenshots/
+mining/memory_captures/
+mining/__pycache__/
+mining/mining-venv/
+mining/*_captures/
+mining/*.log
 .DS_Store
