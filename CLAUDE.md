@@ -18,3 +18,27 @@
 - Use contextmanagers for resource management
 - Errors: Prefer explicit error handling with informative messages
 - Naming: snake_case for variables/functions, PascalCase for classes
+
+## Mining Module Status
+- Location: `/mining` subdirectory
+- Purpose: Data collection system that respects privacy
+
+### Components
+- `keystroke_recorder.py`: Real-time keystroke capture with in-memory buffer
+- `screen_recorder.py`: Optimized in-memory screenshot capturing (2-3 FPS)
+- `keystroke_sanitizer.py`: Password detection and sanitization
+- `data_collector.py`: Main controller integrating all modules
+- `keystroke_logger.py`: Legacy implementation (being replaced)
+
+### Current Status
+- Refactoring completed for screen and keystroke recorders
+- Optimized for memory storage with detailed timestamps
+- Sanitization system implemented for privacy protection
+- Working on final integration and testing
+
+### Project Structure
+- Generated directories (excluded from git):
+  - `memory_captures/`
+  - `screenshots/`
+  - `logs/`
+  - `__pycache__/`
