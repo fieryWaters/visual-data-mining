@@ -1,0 +1,20 @@
+# Visual Data Mining Project Guide
+
+## Build & Test Commands
+- Setup environment: `source setup_activate_venv.sh` (SFSU cluster)
+- Run training (LoRA): `sbatch training/finetune_lora_slurm.sh`
+- Run training (full): `sbatch training/finetune_full_slurm.sh`
+- Run inference: `python inferences.py`
+- Run accuracy test: `python training/accuracy_benchmark.py`
+- Run synthetic accuracy test: `python training/accuracy_benchmark_synthetic.py`
+- Launch jupyter: `bash launch_sfsu_jupyter_client.sh`
+
+## Code Style Guidelines
+- Use Python 3.9+ features
+- Follow PEP 8 conventions (black formatter)
+- Imports: standard lib first, then third-party, then local modules
+- Use bfloat16 precision for model training
+- Use torch.cuda.empty_cache() and gc.collect() when freeing model memory
+- Use contextmanagers for resource management
+- Errors: Prefer explicit error handling with informative messages
+- Naming: snake_case for variables/functions, PascalCase for classes
