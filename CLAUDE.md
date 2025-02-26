@@ -18,6 +18,8 @@
 - Use contextmanagers for resource management
 - Errors: Prefer explicit error handling with informative messages
 - Naming: snake_case for variables/functions, PascalCase for classes
+- Comments: Only add comments that explain the code's purpose or logic - do not add comments that respond to change requests
+- Keep code modifications clean without explanatory or conversational comments
 
 ## Mining Module Status
 - Location: `/mining` subdirectory

@@ -34,37 +34,33 @@ class KeystrokeBuffer:
 class KeystrokeRecorder:
     """Records keystrokes and mouse actions in real-time"""
     
-    def __init__(self, buffer=None):
+    def __init__(self):
         """Initialize recorder with event buffer"""
-        self.buffer = buffer if buffer else KeystrokeBuffer()
+        self.buffer = KeystrokeBuffer()
         self.keyboard_listener = None
         self.mouse_listener = None
         self.running = False
         self.pending_click = None
         self.pending_timer = None
         self.dbl_click_threshold = 0.3  # seconds
-        
+
     def on_key_press(self, key):
         """Handle key press events"""
-        try:
-            key_val = key.char
-        except AttributeError:
-            key_val = str(key)
+        key_val = str(key)
         
         self.buffer.add_event({
-            "event": "KEY_PRESS",
+            "event": "KEYBOARD",
+            "event_type": "PRESS",
             "key": key_val
         })
         
     def on_key_release(self, key):
         """Handle key release events"""
-        try:
-            key_val = key.char
-        except AttributeError:
-            key_val = str(key)
+        key_val = str(key)
             
         self.buffer.add_event({
-            "event": "KEY_RELEASE",
+            "event": "KEYBOARD",
+            "event_type": "RELEASE",
             "key": key_val
         })
         
@@ -78,15 +74,6 @@ class KeystrokeRecorder:
         xi, yi = int(x), int(y)
         
         if pressed:
-            # Record all press events
-            event = {
-                "event": "CLICK",
-                "button": str(button),
-                "x": xi,
-                "y": yi,
-                "pressed": True
-            }
-            
             # Check for double clicks
             if self.pending_click is None:
                 self.pending_click = (xi, yi, button)
@@ -97,9 +84,24 @@ class KeystrokeRecorder:
                     self.clear_pending
                 )
                 self.pending_timer.start()
+                
+                # Record single click event
+                event = {
+                    "event": "MOUSE",
+                    "event_type": "SINGLE_CLICK",
+                    "button": str(button),
+                    "x": xi,
+                    "y": yi
+                }
             else:
-                # Second click within threshold
-                event["double_click"] = True
+                # Second click within threshold - record as double click
+                event = {
+                    "event": "MOUSE",
+                    "event_type": "DOUBLE_CLICK",
+                    "button": str(button),
+                    "x": xi,
+                    "y": yi
+                }
                 
                 # Cancel the pending timer and clear state
                 if self.pending_timer:
@@ -107,35 +109,20 @@ class KeystrokeRecorder:
                 self.clear_pending()
                 
             self.buffer.add_event(event)
-        else:
-            # Record release events
-            self.buffer.add_event({
-                "event": "CLICK",
-                "button": str(button),
-                "x": xi,
-                "y": yi,
-                "pressed": False
-            })
             
     def on_scroll(self, x, y, dx, dy):
         """Handle mouse scroll events"""
         xi, yi = int(x), int(y)
         
         self.buffer.add_event({
-            "event": "SCROLL",
+            "event": "MOUSE",
+            "event_type": "SCROLL",
             "x": xi,
             "y": yi,
             "dx": int(dx),
             "dy": int(dy),
             "direction": "up" if dy > 0 else "down"
         })
-        
-    def on_move(self, x, y):
-        """Handle mouse movement events"""
-        # Only record every few movements to reduce data volume
-        # This is intentionally not implemented to keep the buffer light
-        pass
-        
     def start(self):
         """Start recording keystrokes and mouse actions"""
         if self.running:
@@ -148,8 +135,7 @@ class KeystrokeRecorder:
         
         self.mouse_listener = mouse.Listener(
             on_click=self.on_click,
-            on_scroll=self.on_scroll,
-            on_move=self.on_move
+            on_scroll=self.on_scroll
         )
         
         self.keyboard_listener.start()
