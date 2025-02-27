@@ -55,7 +55,7 @@ class DisplayWidget:
         self.master.bind("<B1-Motion>", self.do_move)
 
     def toggle_state(self):
-        """Toggle between running (green circle, 'Stop' button) and not running (red circle, 'Run' button)."""
+        # Toggle between running (green circle, 'Stop' button) and not running (red circle, 'Run' button).
         self.is_running = not self.is_running
         if self.is_running:
             self.canvas.itemconfig(self.circle_id, fill="green")
