@@ -22,6 +22,9 @@
 - Keep code modifications clean without explanatory or conversational comments
 - Write code as simple as possible. Only add error checking and test cases when those cases are needed. Don't be afraid to add error checking but realize there is a code complexity and code readability cost. 
 
+## Claude Interaction Commands
+- WWAC (Without Writing Any Code): Use this prefix when you want Claude to explain a concept, strategy, or provide an analysis without actually implementing the code. Example: "WWAC: How would you approach detecting passwords in keystroke data?"
+
 ## Mining Module Status
 - Location: `/mining` subdirectory
 - Purpose: Data collection system that respects privacy
