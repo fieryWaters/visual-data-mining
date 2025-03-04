@@ -426,28 +426,40 @@ def test():
     
     # Create a recorder
     recorder = KeystrokeRecorder()
-    recorder.start()
     
-    print("Type some text including 'secret123'. Press Ctrl+C to stop...")
     try:
-        time.sleep(10)  # Give time to type
-    except KeyboardInterrupt:
-        pass
-    finally:
-        recorder.stop()
+        # Start recording
+        recorder.start()
+        print("Type some text including 'secret123'. Press Ctrl+C to stop...")
         
-    # Process the keystrokes
-    events = recorder.get_buffer_contents()
-    sanitizer.load_passwords()
-    processed = sanitizer.process_events(events)
-    
-    print("\nExtracted text:")
-    print(processed["text"])
-    
-    print("\nSanitized text:")
-    print(processed["sanitized_text"])
-    
-    print(f"\nFound {len(processed['password_locations'])} password instances")
+        # Wait for user input
+        while True:
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        print("\nStopping recording...")
+    except Exception as e:
+        print(f"Error during recording: {e}")
+    finally:
+        # Ensure recorder is stopped
+        try:
+            recorder.stop()
+            
+            # Process the keystrokes
+            events = recorder.get_buffer_contents()
+            print(f"Captured {len(events)} events")
+            
+            sanitizer.load_passwords()
+            processed = sanitizer.process_events(events)
+            
+            print("\nExtracted text:")
+            print(processed["text"])
+            
+            print("\nSanitized text:")
+            print(processed["sanitized_text"])
+            
+            print(f"\nFound {len(processed['password_locations'])} password instances")
+        except Exception as e:
+            print(f"Error processing results: {e}")
     
 
 if __name__ == "__main__":

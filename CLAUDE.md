@@ -20,6 +20,7 @@
 - Naming: snake_case for variables/functions, PascalCase for classes
 - Comments: Only add comments that explain the code's purpose or logic - do not add comments that respond to change requests
 - Keep code modifications clean without explanatory or conversational comments
+- Write code as simple as possible. Only add error checking and test cases when those cases are needed. Don't be afraid to add error checking but realize there is a code complexity and code readability cost. 
 
 ## Mining Module Status
 - Location: `/mining` subdirectory

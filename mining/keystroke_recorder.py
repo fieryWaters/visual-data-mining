@@ -43,26 +43,41 @@ class KeystrokeRecorder:
         self.pending_click = None
         self.pending_timer = None
         self.dbl_click_threshold = 0.3  # seconds
+        self._setup_complete = False
 
     def on_key_press(self, key):
         """Handle key press events"""
-        key_val = str(key)
-        
-        self.buffer.add_event({
-            "event": "KEYBOARD",
-            "event_type": "PRESS",
-            "key": key_val
-        })
+        try:
+            # Handle normal characters
+            if hasattr(key, 'char'):
+                key_val = key.char
+            # Handle special keys
+            else:
+                key_val = f"Key.{key.name}" if hasattr(key, 'name') else str(key)
+            
+            self.buffer.add_event({
+                "event": "KEY_PRESS",
+                "key": key_val
+            })
+        except Exception as e:
+            print(f"Error processing key press: {e}")
         
     def on_key_release(self, key):
         """Handle key release events"""
-        key_val = str(key)
-            
-        self.buffer.add_event({
-            "event": "KEYBOARD",
-            "event_type": "RELEASE",
-            "key": key_val
-        })
+        try:
+            # Handle normal characters
+            if hasattr(key, 'char'):
+                key_val = key.char
+            # Handle special keys
+            else:
+                key_val = f"Key.{key.name}" if hasattr(key, 'name') else str(key)
+                
+            self.buffer.add_event({
+                "event": "KEY_RELEASE",
+                "key": key_val
+            })
+        except Exception as e:
+            print(f"Error processing key release: {e}")
         
     def clear_pending(self):
         """Clear the pending click after the double-click threshold expires"""
