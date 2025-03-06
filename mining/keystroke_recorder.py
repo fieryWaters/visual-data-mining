@@ -34,9 +34,14 @@ class KeystrokeBuffer:
 class KeystrokeRecorder:
     """Records keystrokes and mouse actions in real-time"""
     
-    def __init__(self):
-        """Initialize recorder with event buffer"""
-        self.buffer = KeystrokeBuffer()
+    def __init__(self, buffer_size=10000):
+        """
+        Initialize recorder with event buffer
+        
+        Args:
+            buffer_size: Maximum number of events to store in the buffer
+        """
+        self.buffer = KeystrokeBuffer(max_size=buffer_size)
         self.keyboard_listener = None
         self.mouse_listener = None
         self.running = False

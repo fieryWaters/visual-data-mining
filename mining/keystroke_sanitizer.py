@@ -591,13 +591,62 @@ class KeystrokeSanitizer:
         # Write to JSON Lines file
         with open(log_file, "a") as f:
             f.write(json.dumps(log_entry) + "\n")
+            
+    def save_sanitized_json(self, sanitized_data, output_file):
+        """
+        Save a sanitized JSON stream of keystrokes to a file.
+        Preserves the original structure of events but replaces sensitive data with placeholders.
+        
+        Args:
+            sanitized_data: Result from process_events
+            output_file: Path to the output JSON file
+        
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            
+            # Create a structured JSON object with metadata and sanitized events
+            output_data = {
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "type": "sanitized_keystroke_data",
+                    "version": "1.0",
+                    "contains_sensitive_data": len(sanitized_data["password_locations"]) > 0,
+                    "sanitization_applied": True
+                },
+                "events": sanitized_data["events"],
+                "text_summary": {
+                    "original_length": len(sanitized_data["text"]),
+                    "sanitized_length": len(sanitized_data["sanitized_text"]),
+                    "password_locations_count": len(sanitized_data["password_locations"])
+                }
+            }
+            
+            # Write the JSON file (pretty-printed for readability)
+            with open(output_file, "w") as f:
+                json.dump(output_data, f, indent=2)
+                
+            return True
+            
+        except Exception as e:
+            print(f"Error saving sanitized JSON: {e}")
+            return False
 
 
 # Test function
-def test():
-    """Test the keystroke sanitizer"""
+def test(test_json=False):
+    """
+    Test the keystroke sanitizer
+    
+    Args:
+        test_json: Whether to test JSON output
+    """
     from keystroke_recorder import KeystrokeRecorder
     import time
+    import os
     
     # Create a sanitizer and add test passwords
     sanitizer = KeystrokeSanitizer()
@@ -641,6 +690,24 @@ def test():
             print(processed["sanitized_text"])
             
             print(f"\nFound {len(processed['password_locations'])} password instances")
+            
+            # Test JSON output if requested
+            if test_json:
+                test_dir = "test_output"
+                os.makedirs(test_dir, exist_ok=True)
+                json_path = os.path.join(test_dir, "sanitized_test.json")
+                
+                if sanitizer.save_sanitized_json(processed, json_path):
+                    print(f"\nSanitized JSON saved to: {json_path}")
+                    print("The JSON contains the sanitized keystroke events with sensitive data replaced.")
+                    
+                    # Show a sample of the sanitized events
+                    if processed["events"]:
+                        print("\nSample of sanitized events:")
+                        for i, event in enumerate(processed["events"][:5]):  # Show first 5 events
+                            print(f"  Event {i}: {event}")
+                        if len(processed["events"]) > 5:
+                            print(f"  ... {len(processed["events"]) - 5} more events")
             
             # Show password locations for debugging
             if processed["password_locations"]:
@@ -768,4 +835,9 @@ def test():
     
 
 if __name__ == "__main__":
-    test()
+    import argparse
+    parser = argparse.ArgumentParser(description="Test the keystroke sanitizer")
+    parser.add_argument("--json", action="store_true", help="Test JSON output")
+    args = parser.parse_args()
+    
+    test(test_json=args.json)

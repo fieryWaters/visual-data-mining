@@ -4,10 +4,14 @@
 - Setup environment: `source setup_activate_venv.sh` (SFSU cluster)
 - Run training (LoRA): `sbatch training/finetune_lora_slurm.sh`
 - Run training (full): `sbatch training/finetune_full_slurm.sh`
-- Run inference: `python inferences.py`
-- Run accuracy test: `python training/accuracy_benchmark.py`
-- Run synthetic accuracy test: `python training/accuracy_benchmark_synthetic.py`
+- Run inference: `python3 inferences.py`
+- Run accuracy test: `python3 training/accuracy_benchmark.py`
+- Run synthetic accuracy test: `python3 training/accuracy_benchmark_synthetic.py`
 - Launch jupyter: `bash launch_sfsu_jupyter_client.sh`
+
+## Important Python Usage Notes
+- Always use `python3` explicitly instead of `python` for all commands
+- The mining module uses `.venv` for its virtual environment
 
 ## Code Style Guidelines
 - Use Python 3.9+ features
