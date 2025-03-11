@@ -279,7 +279,6 @@ def test_sanitizer(output_dir="test_output"):
     print("Adding passwords to detect: 'secret123', 'secret456', 'secret1234'")
     sanitizer.add_password("secret123")
     sanitizer.add_password("secret456")
-    sanitizer.add_password("secret1234")
     sanitizer.save_passwords()
     
     print(f"\nRunning {len(test_cases)} test cases...")

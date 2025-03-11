@@ -26,6 +26,30 @@ class FuzzyMatcher:
     """
     
     @staticmethod
+    def calculate_similarity(str1, str2):
+        """
+        Calculate similarity between two strings.
+        Handles case insensitivity and different string lengths.
+        
+        Args:
+            str1: First string
+            str2: Second string
+            
+        Returns:
+            float: Similarity score (0.0-1.0)
+        """
+        # Convert to lowercase for case-insensitive comparison
+        str1_lower = str1.lower()
+        str2_lower = str2.lower()
+        
+        # Check for exact match after case normalization
+        if str1_lower == str2_lower:
+            return 1.0
+            
+        # Use SequenceMatcher for fuzzy matching
+        return SequenceMatcher(None, str1_lower, str2_lower).ratio()
+    
+    @staticmethod
     def find_exact_matches(text, password):
         """
         Find exact matches of a password in text

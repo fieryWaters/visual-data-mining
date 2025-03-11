@@ -11,7 +11,7 @@ from typing import Dict, List, Tuple, Any, Set
 
 from utils.password_manager import PasswordManager
 from utils.text_buffer import TextBuffer
-from utils.fuzzy_matcher import FuzzyMatcher
+from utils.fuzzy_matcher import FuzzyMatcher, Match
 
 
 class KeystrokeSanitizer:
@@ -54,6 +54,7 @@ class KeystrokeSanitizer:
         """
         Sanitize text by replacing password locations with [REDACTED] placeholders.
         Does not use asterisks (*) at all, just clean [REDACTED] markers.
+        Preserves non-password characters between adjacent password matches.
         
         Args:
             text: Original text
@@ -88,7 +89,8 @@ class KeystrokeSanitizer:
                 
             # Add any text between the last region and this one
             if start > last_end:
-                result += text[last_end:start]
+                between_text = text[last_end:start]
+                result += between_text
                 
             # Add the redaction marker - NO asterisks or padding
             result += "[REDACTED]"
@@ -98,17 +100,75 @@ class KeystrokeSanitizer:
             
         # Add any remaining text after the last region
         if last_end < len(text):
-            result += text[last_end:]
+            remaining_text = text[last_end:]
+            result += remaining_text
             
         return result
         
+    def _find_optimal_length(self, test_string, reference_password):
+        """
+        Find the optimal length for a password match by analyzing the similarity curve.
+        Identifies the point where adding more characters consistently decreases similarity.
+        
+        Args:
+            test_string: The string to analyze
+            reference_password: The password to compare against
+            
+        Returns:
+            int: The optimal length (0 if no clear breakpoint found)
+        """
+        # Too short to analyze
+        if len(test_string) < 5:
+            return 0
+            
+        # Track similarity at each length
+        similarities = []
+        for i in range(1, len(test_string) + 1):
+            substring = test_string[:i]
+            similarity = FuzzyMatcher.calculate_similarity(substring, reference_password)
+            similarities.append(similarity)
+        
+        # Find the peak followed by consistent decreases
+        optimal_length = 0
+        max_similarity = 0
+        decreasing_count = 0
+        
+        for i in range(1, len(similarities)):
+            current = similarities[i]
+            previous = similarities[i-1]
+            
+            # If increasing, update max values and reset decreasing counter
+            if current > previous:
+                max_similarity = current
+                optimal_length = i + 1  # Convert to 1-based index
+                decreasing_count = 0
+            # If decreasing significantly from the peak
+            elif current < previous - 0.01:
+                decreasing_count += 1
+                # Break point after 3 consecutive decreases
+                if decreasing_count >= 3 and optimal_length > 0:
+                    # Return the position before decreases started
+                    return optimal_length
+            # If basically flat, don't count as decreasing
+            else:
+                decreasing_count = 0
+                
+        # If we found a reasonable peak but didn't hit 3 consecutive decreases
+        # (might happen at the end of the string)
+        if optimal_length > 0 and max_similarity > 0.7:
+            # Find the last increasing point
+            for i in range(len(similarities) - 1, 0, -1):
+                if similarities[i] > similarities[i-1]:
+                    final_optimal = i + 1  # Convert to 1-based index
+                    return final_optimal
+        
+        return optimal_length
+    
     def _detect_passwords(self, text: str, buffer_states: List[str]) -> List[Tuple[int, int]]:
         """
-        Quality-ranked greedy approach to password detection that handles:
-        - Exact matches (case sensitive and insensitive)
-        - Adjacent passwords (same or different)
-        - Consecutive identical passwords
-        - Passwords in buffer history (typed and deleted)
+        Simplified approach to password detection using sliding window similarity matching.
+        Handles adjacent passwords, exact matches, and variations naturally through
+        a single unified algorithm.
         
         Args:
             text: The text to search for passwords
@@ -124,115 +184,100 @@ class KeystrokeSanitizer:
             
         if not text and not buffer_states:
             return []
-            
-        # Step 1: Collect ALL potential password matches
-        all_matches = []
         
-        # Use basic detection along with buffer states
-        basic_matches = FuzzyMatcher.find_all_matches(text, all_passwords, buffer_states)
-        all_matches.extend(basic_matches)
+        # Helper function to remove overlapping regions
+        def remove_overlapping(candidates, selected_region):
+            """Remove candidates that overlap with the selected region"""
+            start, end = selected_region
+            return [c for c in candidates if not (c[0] < end and c[1] > start)]
         
-        # Look for adjacent distinct passwords
-        adjacent_matches = FuzzyMatcher.find_adjacent_distinct_passwords(text, all_passwords)
-        all_matches.extend(adjacent_matches)
+        # Step 1: Generate all potential matches using sliding windows
+        match_candidates = []
         
-        # Look for consecutive identical passwords
         for password in all_passwords:
-            consecutive_matches = FuzzyMatcher.find_consecutive_matches(text, password, min_count=2)
-            all_matches.extend(consecutive_matches)
-        
-        # Step 2: Score each match based on quality
-        scored_matches = []
-        for match in all_matches:
-            # Calculate a quality score (higher is better)
-            # Factors:
-            # 1. Exact matches are better than fuzzy matches
-            # 2. Longer matches are better than shorter
-            # 3. Higher similarity is better
-            # 4. Match source (some sources are more reliable)
+            password_len = len(password)
+            min_window = max(password_len - 2, 4)  # Allow for slight variations
+            max_window = min(password_len + 4, len(text))
             
-            # Base score from similarity (0-100)
-            score = match.similarity * 100
-            
-            # Bonus for exact matches
-            if match.similarity >= 0.95:  # Close to exact match
-                score += 25
-                
-            # Bonus for longer passwords (up to 20 points)
-            pwd_len = len(match.password)
-            length_bonus = min(20, pwd_len * 2)
-            score += length_bonus
-            
-            # Bonus/penalty based on match source
-            if "exact" in match.source:
-                score += 15  # Strong bonus for exact matches
-            elif "word_boundary" in match.source:
-                score += 10  # Good bonus for word boundary matches
-            elif "fuzzy" in match.source:
-                score -= 5   # Slight penalty for fuzzy matches
-                
-            # Penalize matches that aren't in the known password list
-            known_password = False
-            for password in all_passwords:
-                # Check if this is a known password (case insensitive)
-                if match.password.lower() == password.lower():
-                    known_password = True
-                    break
+            # For each possible window size
+            for window_size in range(min_window, max_window + 1):
+                # Slide window through text
+                for i in range(len(text) - window_size + 1):
+                    window_text = text[i:i + window_size]
                     
-            if not known_password:
-                # Big penalty for matches not in the password list
-                score -= 30
-                
-            # Store the scored match
-            scored_matches.append((match, score))
-        
-        # Step 3: Sort matches by score (highest first)
-        scored_matches.sort(key=lambda x: x[1], reverse=True)
-        
-        # Step 4: Greedily select non-overlapping matches in order of score
-        selected_matches = []
-        claimed_regions = []  # Track regions already claimed by higher-scoring matches
-        
-        for match, score in scored_matches:
-            # Check if this match significantly overlaps with any claimed region
-            significant_overlap = False
-            
-            for start, end in claimed_regions:
-                # Calculate overlap
-                overlap_start = max(match.start, start)
-                overlap_end = min(match.end, end)
-                overlap_len = max(0, overlap_end - overlap_start)
-                
-                # If there's any significant overlap (>30%), reject this match
-                if overlap_len > 0 and overlap_len > 0.3 * (match.end - match.start):
-                    significant_overlap = True
-                    break
+                    # Calculate similarity (case insensitive)
+                    similarity = FuzzyMatcher.calculate_similarity(window_text.lower(), password.lower())
                     
-            # Only accept this match if it doesn't significantly overlap with claimed regions
-            if not significant_overlap:
-                selected_matches.append(match)
-                # Mark this region as claimed
-                claimed_regions.append((match.start, match.end))
+                    # Keep matches above threshold
+                    if similarity >= 0.75:
+                        match_candidates.append((i, i + window_size, window_text, password, similarity))
         
-        # Step 5: Convert selected matches to password regions
-        password_regions = []
-        for match in selected_matches:
-            password_regions.append((match.start, match.end))
+        # Step 2: For each candidate, optimize the length by probing nearby lengths
+        optimized_candidates = []
+        
+        for start, end, match_text, ref_password, similarity in match_candidates:
+            # If it's a perfect match, keep as is
+            if similarity >= 0.99:
+                optimized_candidates.append((start, end, match_text, ref_password, similarity))
+                continue
             
-        # Step 6: Handle the special case of deleted passwords
-        # (found in buffer states but not in final text)
+            # Find optimal length by analyzing similarity curve
+            optimal_length = self._find_optimal_length(match_text, ref_password)
+            
+            if optimal_length > 0 and optimal_length != len(match_text):
+                # Create optimized match
+                new_text = match_text[:optimal_length]
+                new_end = start + optimal_length
+                new_similarity = FuzzyMatcher.calculate_similarity(new_text.lower(), ref_password.lower())
+                
+                optimized_candidates.append((start, new_end, new_text, ref_password, new_similarity))
+            else:
+                # Keep original if optimization didn't improve
+                optimized_candidates.append((start, end, match_text, ref_password, similarity))
+        
+        # Step 3: Sort by similarity (highest first)
+        optimized_candidates.sort(key=lambda x: x[4], reverse=True)
+        
+        # Step 4: Greedily select non-overlapping matches in order of similarity
+        selected_regions = []
+        remaining_candidates = optimized_candidates.copy()
+        
+        # First process perfect or near-perfect matches (similarity >= 0.9)
+        high_confidence = [c for c in remaining_candidates if c[4] >= 0.9]
+        
+        for start, end, match_text, ref_password, similarity in high_confidence:
+            # Check if this overlaps with already selected regions
+            overlaps = any(s < end and e > start for s, e in selected_regions)
+            
+            if not overlaps:
+                selected_regions.append((start, end))
+                # Remove overlapping candidates
+                remaining_candidates = remove_overlapping(remaining_candidates, (start, end))
+        
+        # Then process good matches (similarity >= 0.85)
+        good_matches = [c for c in remaining_candidates if c[4] >= 0.85]
+        
+        for start, end, match_text, ref_password, similarity in good_matches:
+            # Check if this overlaps with already selected regions
+            overlaps = any(s < end and e > start for s, e in selected_regions)
+            
+            if not overlaps:
+                selected_regions.append((start, end))
+                # Remove overlapping candidates
+                remaining_candidates = remove_overlapping(remaining_candidates, (start, end))
+        
+        # Step 5: Handle buffer states for deleted passwords
         if not text and buffer_states and any(state for state in buffer_states):
             for password in all_passwords:
                 password_lower = password.lower()
                 for state in buffer_states:
                     if state and password_lower in state.lower():
                         # This password was in a buffer state but was deleted
-                        # Add a zero-length region at position 0
-                        password_regions.append((0, 0))
+                        selected_regions.append((0, 0))
                         break
         
-        # Step 7: Sort by start position and return
-        return sorted(password_regions, key=lambda x: x[0])
+        # Return the final password regions, sorted by position
+        return sorted(selected_regions)
 
     def process_events(self, events: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
