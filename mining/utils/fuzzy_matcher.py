@@ -81,7 +81,7 @@ class FuzzyMatcher:
         return filtered_matches
     
     @classmethod
-    def find_matches(cls, text: str, passwords: List[str], min_similarity: float = 0.75) -> List[Match]:
+    def find_matches(cls, text: str, passwords: List[str], min_similarity: float = 0.80) -> List[Match]:
         """
         Find all password matches in text using a single unified algorithm.
         Combines exact, word boundary, and fuzzy matching in one method.
