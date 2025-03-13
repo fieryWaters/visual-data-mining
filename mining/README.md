@@ -17,12 +17,11 @@ Privacy-preserving keystroke and screen recording with sanitization.
 ## Setup
 
 ```bash
-# Create and activate virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+# Run setup script
+./setup.sh
 
-# Install dependencies
-pip3 install -r requirements.txt
+# Or activate existing environment
+source venv/bin/activate
 ```
 
 ## Usage

@@ -1,5 +1,5 @@
 training/.ipynb_checkpoints/
-venv*
+*venv*
 training/llama-recipes
 training/__pycache__/
 .ipynb_checkpoints/

@@ -231,6 +231,52 @@ class KeystrokeSanitizer:
             return False
 
 
-# Run tests from the tests directory
 if __name__ == "__main__":
-    print("Please use test_keystroke_sanitizer.py in the tests directory to test this module.")
+    import time
+    import sys
+    from keystroke_recorder import KeystrokeRecorder
+    
+    # Initialize sanitizer and add test password
+    sanitizer = KeystrokeSanitizer()
+    try:
+        sanitizer.setup_encryption()
+        sanitizer.add_password("secret123")
+        sanitizer.save_passwords()
+        print("Encryption set up successfully with 'secret123' password added")
+    except Exception as e:
+        print(f"Error setting up encryption: {e}")
+        sys.exit(1)
+    
+    # Initialize the keystroke recorder
+    recorder = KeystrokeRecorder()
+    
+    print("Recording keystrokes... Type 'secret123' somewhere in your input.")
+    print("Press Ctrl+C to stop recording and process the results.")
+    
+    try:
+        # Start recording
+        recorder.start()
+        
+        # Keep the main thread running
+        while True:
+            time.sleep(0.5)
+            
+    except KeyboardInterrupt:
+        print("\nStopping keystroke capture...")
+        # Stop the recorder
+        recorder.stop()
+        
+        # Process the captured events
+        events = recorder.get_buffer_contents()
+        if events:
+            print(f"Processing {len(events)} events...")
+            result = sanitizer.process_events(events)
+            print(f"\nOriginal text: {result['text']}")
+            print(f"Sanitized text: {result['sanitized_text']}")
+            if result['password_locations']:
+                print(f"Password locations: {result['password_locations']}")
+            else:
+                print("No passwords detected")
+    
+    except Exception as e:
+        print(f"Error: {e}")
