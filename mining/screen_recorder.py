@@ -23,7 +23,7 @@ class InMemoryScreenRecorder:
     Optimized for performance by keeping everything in RAM.
     """
     
-    def __init__(self, max_frames=300):
+    def __init__(self, max_frames=30):
         """
         Initialize the in-memory screen recorder.
         
@@ -56,7 +56,6 @@ class InMemoryScreenRecorder:
         return total_bytes / (1024 * 1024)  # Convert to MB
     
     def _recording_loop(self):
-        """Main recording loop optimized for maximum speed"""
         try:
             # Variables for tracking performance
             frame_count = 0
@@ -84,12 +83,14 @@ class InMemoryScreenRecorder:
                 current_time = time.time()
                 elapsed = current_time - last_report_time
                 
+                """
                 # Report stats periodically (every 5 seconds)
                 if elapsed >= 5:
                     self.actual_fps = frame_count / elapsed
                     logger.info(f"Screen recording at {self.actual_fps:.2f} FPS, buffer: {len(self.frames)} frames, memory: {self.get_memory_usage_mb():.1f} MB")
                     frame_count = 0
                     last_report_time = current_time
+                """
                 
         except Exception as e:
             logger.error(f"Error in recording thread: {e}")
@@ -114,7 +115,7 @@ class InMemoryScreenRecorder:
         )
         self.recording_thread.start()
         
-        logger.info("In-memory screen recording started (maximum speed)")
+        #logger.info("In-memory screen recording started (maximum speed)")
     
     def stop(self):
         """Stop recording the screen"""
@@ -206,51 +207,18 @@ class InMemoryScreenRecorder:
                 
             saved_files.append(filepath)
             
-        logger.info(f"Saved {len(saved_files)} frames to {output_dir}")
+        #logger.info(f"Saved {len(saved_files)} frames to {output_dir}")
         return saved_files
 
 
 
-# Test function 
-def test():
-    """Test the in-memory screen recorder"""
-    # Configuration
-    max_frames = 300    # Keep up to 300 frames in memory
-    duration = 10       # Run for 10 seconds
-    
-    print("\n=== TESTING SCREEN RECORDER (MAXIMUM SPEED) ===")
-    print(f"Settings: max_frames={max_frames}, duration={duration}s")
-    
-    # Create and start recorder
-    recorder = InMemoryScreenRecorder(max_frames=max_frames)
+def test2():
+    output_dir = os.path.join(os.getcwd(), 'screenshots')
+    recorder = InMemoryScreenRecorder(30)
     recorder.start()
-    
-    # Show progress
-    for i in range(duration):
-        if i % 5 == 0:
-            # Every 5 seconds, show buffer stats
-            buffer_size = len(recorder.frames) if hasattr(recorder, 'frames') else 0
-            memory_usage = recorder.get_memory_usage_mb() if buffer_size > 0 else 0
-            print(f"Status: Recording for {i} seconds, buffer size: {buffer_size} frames, memory: {memory_usage:.2f} MB")
+    while(True):
         time.sleep(1)
-    
-    # Stop recording
-    recorder.stop()
-    
-    # Show stats
-    buffer_size = len(recorder.frames)
-    memory_usage = recorder.get_memory_usage_mb()
-    print(f"\nRecording stopped after {duration} seconds")
-    print(f"Final buffer: {buffer_size} frames, memory usage: {memory_usage:.2f} MB")
-    print(f"Actual FPS: {buffer_size/duration:.2f}")
-    
-    # Save captured frames
-    output_dir = os.path.join(os.getcwd(), 'memory_captures')
-    print(f"\nSaving frames to {output_dir}...")
-    saved_files = recorder.save_frames_to_disk(output_dir, format='jpg')
-    print(f"Saved {len(saved_files)} frames")
-    
-    print("\nTest complete.")
+        recorder.save_frames_to_disk(output_dir)
 
 if __name__ == "__main__":
-    test()
+    test2()
