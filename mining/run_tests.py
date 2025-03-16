@@ -100,10 +100,10 @@ def run_unittest_tests(test_files):
         print("\n❌ SOME TESTS FAILED")
         return False
 
-def run_specific_module(module_name):
-    """Run tests for a specific module"""
+def run_specific_module(module_name, test_number=None):
+    """Run tests for a specific module, optionally a specific test number"""
     print("\n" + "="*80)
-    print(f"RUNNING TESTS FOR: {module_name}")
+    print(f"RUNNING TESTS FOR: {module_name}" + (f" TEST #{test_number}" if test_number else ""))
     print("="*80)
     
     # Map module names to test file names
@@ -119,6 +119,29 @@ def run_specific_module(module_name):
         print(f"Available modules: {', '.join(module_map.keys())}")
         return False
     
+    # For sanitizer with test number, run just that specific test
+    if module_name == 'sanitizer' and test_number:
+        try:
+            # Just run the specified test directly
+            import unittest
+            from tests.test_keystroke_sanitizer import TestKeystrokeSanitizer
+            
+            # Create and configure test instance
+            test_case = TestKeystrokeSanitizer('test_all_cases')
+            test_case.setUp()
+            
+            # Run the specific test
+            test_case.test_all_cases(test_number)
+            
+            # Clean up
+            test_case.tearDown()
+            return True
+        except Exception as e:
+            print(f"Error running test: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
     # Run the unittest for that module
     return run_unittest_tests([module_map[module_name]])
 
@@ -127,7 +150,7 @@ def print_help():
     print("\nKeystroke Sanitizer Test Runner")
     print("==============================")
     print("Usage:")
-    print("  python run_tests.py [module_name]")
+    print("  python run_tests.py [module_name] [test_number]")
     print("")
     print("Available modules:")
     print("  sanitizer        - Tests for the KeystrokeSanitizer (refactored version)")
@@ -136,11 +159,20 @@ def print_help():
     print("  text_buffer      - Tests for the TextBuffer utility")
     print("  all              - Runs all tests (default)")
     print("")
+    print("Examples:")
+    print("  python run_tests.py sanitizer     - Run all sanitizer tests")
+    print("  python run_tests.py sanitizer 10  - Run just test case #10 (Whitespace Handling)")
+    print("")
 
 if __name__ == "__main__":
     # Check if the user wants to run a specific module
     if len(sys.argv) > 1:
         module_name = sys.argv[1].lower()
+        
+        # Check for test number (optional)
+        test_number = None
+        if len(sys.argv) > 2:
+            test_number = sys.argv[2]
         
         if module_name in ('-h', '--help', 'help'):
             print_help()
@@ -148,7 +180,7 @@ if __name__ == "__main__":
         elif module_name == 'all':
             success = run_all_tests()
         else:
-            success = run_specific_module(module_name)
+            success = run_specific_module(module_name, test_number)
     else:
         # Default: run all tests
         success = run_all_tests()

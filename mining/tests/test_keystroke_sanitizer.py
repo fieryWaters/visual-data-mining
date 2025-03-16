@@ -9,6 +9,7 @@ A simplified test suite for the KeystrokeSanitizer module.
 import os
 import time
 import unittest
+import json
 from datetime import datetime
 from pathlib import Path
 import sys
@@ -52,6 +53,33 @@ class TestKeystrokeSanitizer(unittest.TestCase):
         
         return sanitizer
     
+    def format_keystroke_streams(self, events):
+        """
+        Extract and format keystroke events into readable press and release streams.
+        For special keys (non-printable), show their representation.
+        """
+        press_stream = []
+        release_stream = []
+        
+        for event in events:
+            if event["event"] == "KEY_PRESS":
+                key = event.get("key", "")
+                if len(key) == 1:  # Printable character
+                    press_stream.append(key)
+                else:  # Special key
+                    press_stream.append(f"[{key}]")
+            elif event["event"] == "KEY_RELEASE":
+                key = event.get("key", "")
+                if len(key) == 1:  # Printable character
+                    release_stream.append(key)
+                else:  # Special key
+                    release_stream.append(f"[{key}]")
+        
+        return {
+            "press_stream": "".join(press_stream),
+            "release_stream": "".join(release_stream)
+        }
+    
     def run_test(self, text, special_keys=None, expected_output=None, 
                  min_detections=0, filename=None, custom_passwords=None):
         """Run a test with given parameters and return sanitized data"""
@@ -78,7 +106,7 @@ class TestKeystrokeSanitizer(unittest.TestCase):
         # Process events
         sanitized_data = sanitizer.process_events(events)
         
-        # Save results if filename specified
+        # Save ONLY sanitized results if filename specified (NEVER raw keystrokes!)
         if filename:
             output_file = self.test_dir / f"{filename}.json"
             sanitizer.save_sanitized_json(sanitized_data, str(output_file))
@@ -102,9 +130,13 @@ class TestKeystrokeSanitizer(unittest.TestCase):
         # Return data for further checks
         return sanitized_data
             
-    def test_all_cases(self):
-        """Run all test cases for the sanitizer"""
-        print("\nRunning all keystroke sanitizer test cases:")
+    def test_all_cases(self, test_number=None):
+        """Run all test cases or a specific test case by number
+        
+        Args:
+            test_number: Optional integer to run only a specific test case (1-indexed)
+        """
+        print("\nRunning keystroke sanitizer test cases:")
         
         # All test cases in a single list
         test_cases = [
@@ -244,11 +276,30 @@ class TestKeystrokeSanitizer(unittest.TestCase):
             }
         ]
 
-        # Run all test cases
+        # Filter test cases if a specific number was provided
+        if test_number is not None:
+            try:
+                test_idx = int(test_number) - 1  # Convert to 0-indexed
+                if 0 <= test_idx < len(test_cases):
+                    test_cases = [test_cases[test_idx]]
+                else:
+                    print(f"Error: Test number {test_number} is out of range (1-{len(test_cases)})")
+                    return
+            except ValueError:
+                print(f"Error: Invalid test number '{test_number}'")
+                return
+        
+        # Run test cases
         for i, case in enumerate(test_cases):
-            case_num = i + 1
+            if test_number is None:
+                case_num = i + 1
+            else:
+                case_num = int(test_number)
+                
             print(f"\n--- Case {case_num}: {case['name']} ---")
             print(f"Input: '{case['text']}'")
+            if case.get('expected'):
+                print(f"Expected: '{case['expected']}'")
             
             # Track if we need to check buffer for deleted passwords
             check_buffer = case.get('check_buffer', False)
@@ -266,6 +317,38 @@ class TestKeystrokeSanitizer(unittest.TestCase):
             # Print result summary
             print(f"Detected: {len(result['password_locations'])} password locations")
             print(f"Sanitized: '{result['sanitized_text']}'")
+            
+            # Read the keystrokes directly from JSON file
+            if case.get('filename'):
+                json_file_path = self.test_dir / f"{case.get('filename')}.json"
+                if json_file_path.exists():
+                    try:
+                        with open(json_file_path, 'r') as f:
+                            json_data = json.load(f)
+                            # Extract and filter events by type
+                            events = json_data.get('events', [])
+                            keypresses = []
+                            keyreleases = []
+                            passwords = []
+                            
+                            for event in events:
+                                event_type = event.get('event')
+                                if event_type == 'KEY_PRESS' and 'key' in event:
+                                    key = event.get('key')
+                                    keypresses.append(key if len(key) == 1 else f"[{key}]")
+                                    
+                                elif event_type == 'KEY_RELEASE' and 'key' in event: 
+                                    key = event.get('key')
+                                    keyreleases.append(key if len(key) == 1 else f"[{key}]")
+                                    
+                                elif event_type == 'PASSWORD_FOUND':
+                                    passwords.append("[PASSWORD_FOUND]")
+                            
+                            # Display events in a more readable format
+                            print(f"Key presses:   {''.join(keypresses + passwords)}")
+                            print(f"Key releases:  {''.join(keyreleases)}")
+                    except Exception as e:
+                        print(f"Error reading JSON file: {e}")
             
             # Additional check for deleted passwords
             if check_buffer and "secret123" in str(result["buffer_states"]):
