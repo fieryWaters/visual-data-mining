@@ -304,6 +304,10 @@ class TestKeystrokeSanitizer(unittest.TestCase):
             # Track if we need to check buffer for deleted passwords
             check_buffer = case.get('check_buffer', False)
             
+            # Update filename to include test number
+            if case.get('filename'):
+                case['filename'] = f"test_{case_num:02d}_{case['filename'].replace('test_', '')}"
+            
             # Run the test
             result = self.run_test(
                 text=case['text'],
