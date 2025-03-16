@@ -133,10 +133,11 @@ class TextBuffer:
         Convert keystroke events to text.
         
         Returns:
-            tuple: (text, buffer_states, position_to_event_ids, related_events)
+            tuple: (text, buffer_states, position_to_event_ids, related_events, buffer_state_mappings)
         """
         buffer = TextBuffer()
         related_events = {}
+        buffer_state_mappings = []  # Will store position mappings for each buffer state
         
         # Find press-release pairs
         press_events = {}
@@ -159,12 +160,41 @@ class TextBuffer:
                     related_events[press_id].append(event_id)
                     press_events.pop(key, None)
         
+        # Track all events seen so far for each buffer state
+        events_seen = set()
+        
         # Process events to build text
         for event in events:
             if event["event"] == "KEY_PRESS" and "key" in event:
-                buffer.process_keystroke(event.get("key", ""), id(event))
+                event_id = id(event)
+                
+                # Record this event as seen
+                events_seen.add(event_id)
+                
+                # Add related events
+                if event_id in related_events:
+                    for related_id in related_events[event_id]:
+                        events_seen.add(related_id)
+                
+                # Process the keystroke
+                modified = buffer.process_keystroke(event.get("key", ""), event_id)
+                
+                # If buffer was modified, capture state snapshot
+                if modified:
+                    # Store mapping with both position info and all events seen
+                    # This ensures we can map passwords in deleted text to keystroke events
+                    current_mapping = {}
+                    for pos, event_set in buffer.position_to_events.items():
+                        current_mapping[str(pos)] = list(event_set)
+                    
+                    buffer_state_mappings.append({
+                        "state": buffer.buffer,
+                        "position_mapping": current_mapping,
+                        "events_seen": list(events_seen),
+                        "buffer_state_idx": len(buffer.buffer_states) - 1  # Index of corresponding buffer state
+                    })
         
-        # Convert position_to_events to JSON-compatible format
+        # Convert position_to_events to JSON-compatible format for final state
         position_to_event_ids = {}
         for pos, event_set in buffer.position_to_events.items():
             position_to_event_ids[str(pos)] = list(event_set)
@@ -172,4 +202,5 @@ class TextBuffer:
         return (buffer.get_text(), 
                 buffer.get_buffer_states(), 
                 position_to_event_ids, 
-                related_events)
+                related_events,
+                buffer_state_mappings)

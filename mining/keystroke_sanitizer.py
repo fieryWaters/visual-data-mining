@@ -83,39 +83,65 @@ class KeystrokeSanitizer:
             
         return result
     
-    def _detect_passwords(self, text: str, buffer_states: List[str]) -> List[Tuple[int, int]]:
+    def _detect_passwords(self, text: str, buffer_states: List[str]) -> List[Tuple[int, int, int]]:
         """
         Detect passwords in text using fuzzy matching.
+        
+        Returns:
+            List of tuples (start_pos, end_pos, buffer_state_idx)
+            buffer_state_idx indicates which buffer state contained this password
         """
         # Get passwords to detect
         passwords = self.password_manager.get_passwords()
         if not passwords or (not text and not buffer_states):
             return []
         
-        # Use fuzzy matcher to find potential matches
-        matches = FuzzyMatcher.find_matches(text, passwords)
+        # Track all password locations with their buffer state indexes
+        all_locations = []
         
-        # Convert matches to location tuples
-        locations = [(match.start, match.end) for match in matches]
+        # Look for passwords in the final text
+        if text:
+            matches = FuzzyMatcher.find_matches(text, passwords)
+            for match in matches:
+                # For matches in the final text, use -1 to indicate final state
+                all_locations.append((match.start, match.end, -1))
         
-        # Check if password was in buffer states but deleted
-        if not locations and buffer_states and any(state for state in buffer_states):
+        # Look for passwords in all buffer states
+        for buffer_idx, state in enumerate(buffer_states):
+            if not state:
+                continue
+                
+            # Skip if we've already found this password in the final text
             for password in passwords:
                 password_lower = password.lower()
-                for state in buffer_states:
-                    if state and password_lower in state.lower():
-                        # Password was typed then deleted
-                        locations.append((0, 0))
-                        break
+                if password_lower in state.lower():
+                    # Check if this isn't already covered in the final text
+                    start_idx = state.lower().find(password_lower)
+                    end_idx = start_idx + len(password)
+                    
+                    # Add this location with its buffer state index
+                    all_locations.append((start_idx, end_idx, buffer_idx))
         
-        return sorted(locations)
+        # Return all unique locations (sorted by start position)
+        # If there are duplicates, prefer the ones from the final text
+        unique_locations = []
+        seen_positions = set()
+        
+        # First add locations from final text (buffer_idx = -1)
+        for start, end, buffer_idx in sorted(all_locations, key=lambda x: (x[2] != -1, x[0])):
+            pos_key = (start, end)
+            if pos_key not in seen_positions:
+                unique_locations.append((start, end, buffer_idx))
+                seen_positions.add(pos_key)
+        
+        return unique_locations
 
     def process_events(self, events: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Process keystroke events to detect and sanitize passwords.
         """
         # Convert events to text with tracking information
-        extracted_text, buffer_states, position_to_event_ids, related_events = TextBuffer.events_to_text(events)
+        extracted_text, buffer_states, position_to_event_ids, related_events, buffer_state_mappings = TextBuffer.events_to_text(events)
         
         # Detect password locations
         password_locations = self._detect_passwords(extracted_text, buffer_states)
@@ -124,8 +150,10 @@ class KeystrokeSanitizer:
         events_to_remove = set()
         
         # Find all events that contributed to passwords
-        for start, end in password_locations:
-            if 0 <= start < end <= len(extracted_text):
+        for start, end, buffer_idx in password_locations:
+            # For passwords in the final text
+            if buffer_idx == -1:
+                # Use the current position_to_event_ids mapping
                 for pos in range(start, end):
                     pos_str = str(pos)
                     if pos_str in position_to_event_ids:
@@ -137,6 +165,26 @@ class KeystrokeSanitizer:
                             if event_id in related_events:
                                 for related_id in related_events[event_id]:
                                     events_to_remove.add(related_id)
+            # For passwords in intermediate buffer states
+            else:
+                # Find the corresponding buffer state mapping
+                for mapping in buffer_state_mappings:
+                    if mapping.get("buffer_state_idx") == buffer_idx:
+                        # Get the position mapping for this state
+                        state_position_mapping = mapping.get("position_mapping", {})
+                        
+                        # Get events for this password's character positions
+                        for pos in range(start, end):
+                            pos_str = str(pos)
+                            if pos_str in state_position_mapping:
+                                for event_id_str in state_position_mapping[pos_str]:
+                                    event_id = int(event_id_str)
+                                    events_to_remove.add(event_id)
+                                    
+                                    # Also remove related events
+                                    if event_id in related_events:
+                                        for related_id in related_events[event_id]:
+                                            events_to_remove.add(related_id)
         
         # Create timestamp lookup
         event_timestamps = {}
@@ -150,32 +198,45 @@ class KeystrokeSanitizer:
         sanitized_events = [event.copy() for event in events if id(event) not in events_to_remove]
         
         # Add PASSWORD_FOUND events
-        for start, end in password_locations:
+        for start, end, buffer_idx in password_locations:
+            # Use timestamp from appropriate event
             timestamp = datetime.now().isoformat()
             
-            # Try to use timestamp from last event in password
-            if 0 <= start < end <= len(extracted_text):
-                last_pos = end - 1
-                pos_str = str(last_pos)
-                
-                if pos_str in position_to_event_ids and position_to_event_ids[pos_str]:
-                    event_ids = [int(eid) for eid in position_to_event_ids[pos_str]]
-                    if event_ids:
-                        last_event_id = max(event_ids, 
-                                            key=lambda eid: event_to_index.get(eid, 0) if eid in event_to_index else 0)
-                        if last_event_id in event_timestamps:
-                            timestamp = event_timestamps[last_event_id]
+            if buffer_idx == -1:
+                # For passwords in final text, use timestamp from the last character position
+                if 0 <= start < end <= len(extracted_text):
+                    last_pos = end - 1
+                    pos_str = str(last_pos)
+                    
+                    if pos_str in position_to_event_ids and position_to_event_ids[pos_str]:
+                        event_ids = [int(eid) for eid in position_to_event_ids[pos_str]]
+                        if event_ids:
+                            last_event_id = max(event_ids, 
+                                                key=lambda eid: event_to_index.get(eid, 0) if eid in event_to_index else 0)
+                            if last_event_id in event_timestamps:
+                                timestamp = event_timestamps[last_event_id]
+            else:
+                # For buffer states, use timestamp from that state
+                for mapping in buffer_state_mappings:
+                    if mapping.get("buffer_state_idx") == buffer_idx and "event_id" in mapping:
+                        event_id = mapping["event_id"]
+                        if event_id in event_timestamps:
+                            timestamp = event_timestamps[event_id]
             
             # Add the password found event
             sanitized_events.append({
                 "event": "PASSWORD_FOUND",
                 "timestamp": timestamp,
                 "start_index": start,
-                "end_index": end
+                "end_index": end,
+                "buffer_state_idx": buffer_idx
             })
         
-        # Create sanitized text
-        sanitized_text = self._sanitize_text(extracted_text, password_locations)
+        # Sort all events by timestamp
+        sanitized_events.sort(key=lambda e: e.get("timestamp", ""))
+        
+        # Create sanitized text (convert password_locations to the format _sanitize_text expects)
+        sanitized_text = self._sanitize_text(extracted_text, [(start, end) for start, end, _ in password_locations])
         
         # Return results
         return {
