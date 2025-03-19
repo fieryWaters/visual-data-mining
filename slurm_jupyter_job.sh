@@ -9,7 +9,7 @@
 #SBATCH --output=jupyter_%j.log  # %j is the job ID
 
 # Activate environment
-source ~/git-repos/Visual-Data-Mining-AI-Model/venv_visual_data_mining/bin/activate
+source ~/git-repos/visual-data-mining/setup_activate_venv.sh
 
 # Find a free port
 PORT=$(python3 -c '
