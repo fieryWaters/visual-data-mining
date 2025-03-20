@@ -97,13 +97,20 @@ class InMemoryScreenRecorder:
     
     def start(self):
         """Start recording the screen to memory"""
+        import time
+        
         if self.running:
             return
+            
+        print("Initializing screen recorder...")
         
         # Clear any existing frames
         with self.lock:
             self.frames = []
             self.frame_times = []
+        
+        # Wait 1 second before starting
+        time.sleep(1)
         
         self.running = True
         self.stop_event.clear()
@@ -113,9 +120,12 @@ class InMemoryScreenRecorder:
             target=self._recording_loop,
             daemon=True
         )
-        self.recording_thread.start()
         
-        #logger.info("In-memory screen recording started (maximum speed)")
+        # Wait another second before actually starting the thread
+        time.sleep(1)
+        
+        self.recording_thread.start()
+        print("Screen recorder started successfully")
     
     def stop(self):
         """Stop recording the screen"""
@@ -173,13 +183,12 @@ class InMemoryScreenRecorder:
                 
             return result
     
-    def save_frames_to_disk(self, output_dir, count=None, format='png'):
+    def save_frames_to_disk(self, output_dir, format='png'):
         """
-        Save captured frames to disk.
+        Save all captured frames to disk and clear the buffer.
         
         Args:
             output_dir: Directory to save images
-            count: Number of recent frames to save (None = all)
             format: Image format ('png' or 'jpg')
         
         Returns:
@@ -187,10 +196,14 @@ class InMemoryScreenRecorder:
         """
         os.makedirs(output_dir, exist_ok=True)
         
-        # Get frames to save
-        frames_to_save = self.get_recent_frames(count=count)
-        
         saved_files = []
+        
+        # Get all frames and clear the buffer
+        with self.lock:
+            frames_to_save = list(zip(self.frame_times, self.frames))
+            self.frames = []
+            self.frame_times = []
+        
         for i, (timestamp, frame) in enumerate(frames_to_save):
             # Generate filename
             dt = datetime.fromisoformat(timestamp)
@@ -207,7 +220,6 @@ class InMemoryScreenRecorder:
                 
             saved_files.append(filepath)
             
-        #logger.info(f"Saved {len(saved_files)} frames to {output_dir}")
         return saved_files
 
 

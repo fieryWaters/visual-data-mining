@@ -148,32 +148,81 @@ class KeystrokeRecorder:
         if self.running:
             return
             
-        self.keyboard_listener = keyboard.Listener(
-            on_press=self.on_key_press,
-            on_release=self.on_key_release
-        )
+        # Track which input methods are available
+        keyboard_available = True
+        mouse_available = True
         
-        self.mouse_listener = mouse.Listener(
-            on_click=self.on_click,
-            on_scroll=self.on_scroll
-        )
+        # Try to start keyboard listener first with delay
+        import time
         
-        self.keyboard_listener.start()
-        self.mouse_listener.start()
-        self.running = True
+        try:
+            print("Initializing keyboard listener...")
+            self.keyboard_listener = keyboard.Listener(
+                on_press=self.on_key_press,
+                on_release=self.on_key_release
+            )
+            # Wait 1 second before starting to avoid race conditions
+            time.sleep(1)
+            self.keyboard_listener.start()
+            print("Keyboard listener started successfully")
+            # Wait another 1 second before starting the next listener
+            time.sleep(1)
+        except Exception as e:
+            print(f"Error starting keyboard listener: {e}")
+            self.keyboard_listener = None
+            keyboard_available = False
+            # Even if it failed, delay before next initialization
+            time.sleep(1)
+        
+        # Now try to start mouse listener
+        try:
+            print("Initializing mouse listener...")
+            self.mouse_listener = mouse.Listener(
+                on_click=self.on_click,
+                on_scroll=self.on_scroll
+            )
+            # Wait 1 second before starting to avoid race conditions
+            time.sleep(1)
+            self.mouse_listener.start()
+            print("Mouse listener started successfully")
+        except Exception as e:
+            print(f"Error starting mouse listener: {e}")
+            self.mouse_listener = None
+            mouse_available = False
+            
+        # Only mark as running if at least one input method works
+        if keyboard_available or mouse_available:
+            self.running = True
+            print(f"Recorder running with keyboard={keyboard_available}, mouse={mouse_available}")
+        else:
+            print("ERROR: All input methods failed to start")
+            return False
         
     def stop(self):
         """Stop recording keystrokes and mouse actions"""
         if not self.running:
             return
             
+        # Stop keyboard listener if it was started
         if self.keyboard_listener:
-            self.keyboard_listener.stop()
+            try:
+                self.keyboard_listener.stop()
+                print("Keyboard listener stopped")
+            except Exception as e:
+                print(f"Error stopping keyboard listener: {e}")
+            self.keyboard_listener = None
             
+        # Stop mouse listener if it was started
         if self.mouse_listener:
-            self.mouse_listener.stop()
+            try:
+                self.mouse_listener.stop()
+                print("Mouse listener stopped")
+            except Exception as e:
+                print(f"Error stopping mouse listener: {e}")
+            self.mouse_listener = None
             
         self.running = False
+        print("Recorder stopped")
         
     def get_buffer_contents(self, clear=False):
         """Get the contents of the buffer"""
