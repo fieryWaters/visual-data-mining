@@ -1,4 +1,7 @@
 import tkinter as tk
+import subprocess as sp
+import os
+import glob
 
 class DisplayWidget:
     def __init__(self, master):
@@ -79,48 +82,75 @@ class DisplayWidget:
         y0 = self.master.winfo_y() + dy
         self.master.geometry(f"+{x0}+{y0}")
 
-
 def run_app():
     root = tk.Tk()
     app = DisplayWidget(root)
 
-    # Create a second window with a dark theme
     sync_window = tk.Toplevel(root)
     sync_window.title("Sync Window")
     sync_window.configure(bg="#2C2C2C")
     sync_window.geometry("300x150+100+100")
 
-    for col in range(4):
-        sync_window.columnconfigure(col, weight=1)
-    for row in range(2):
-        sync_window.rowconfigure(row, weight=1)
+    sync_window.columnconfigure(0, weight=1)
+    sync_window.rowconfigure(0, weight=1)
 
-    # Create the "Sync" button (occupies the entire top row)
     sync_button = tk.Button(
-        sync_window, 
-        text="Sync", 
+        sync_window,
+        text="Sync",
         font=("Helvetica", 12, "bold"),
         fg="white",
         bg="#444444",
-        relief="flat"
+        relief="flat",
+        command=lambda: sync_files(sync_button)
     )
-    sync_button.grid(row=0, column=0, columnspan=4, padx=10, pady=10, sticky="nsew")
-
-    # Create four smaller buttons in row=1, columns=0..3
-    for col in range(4):
-        btn_text = f"Button {col+1}"
-        btn = tk.Button(
-            sync_window, 
-            text=btn_text, 
-            font=("Helvetica", 10),
-            fg="white",
-            bg="#666666",
-            relief="flat"
-        )
-        btn.grid(row=1, column=col, padx=5, pady=5, sticky="nsew")
-        
+    sync_button.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
     root.mainloop()
+
+
+def sync_files(button):
+    source_dir = os.path.join(os.getcwd(), 'screenshots')
+    print(source_dir)
+    remote_destination = 'sfsu:/Users/918451214'
+
+    command = [
+        'rsync',
+        '-avz',
+        '--checksum',
+        '--remove-source-files',
+        '--partial-dir=.rsync-partial',
+        '--compress-level=9',
+        source_dir,
+        remote_destination
+    ]
+
+    button.config(text="Syncing...", state="disabled")
+    try:
+        process = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+
+        # Real-time output
+        for line in iter(process.stdout.readline, ''):
+            line = line.strip()
+            if line:
+                print(f"Syncing: {line}")
+                button.config(text=f"{line[:20]}...")
+
+        process.stdout.close()
+        return_code = process.wait()
+
+        if return_code == 0:
+            button.config(text="Synced Successfully")
+        else:
+            stderr_output = process.stderr.read().strip()
+            print(f"Error during sync: {stderr_output}")
+            button.config(text="Sync Failed")
+
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        button.config(text="Error!")
+
+    finally:
+        button.after(3000, lambda: button.config(text="Sync", state="normal"))
 
 if __name__ == "__main__":
     run_app()
