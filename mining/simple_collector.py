@@ -107,9 +107,11 @@ class SimpleCollector:
         # Wait before starting next component
         time.sleep(2)
         
-        # Start screen recorder next
+        # Start screen recorder next (also in inactive state)
         print("\n2. Starting screen recorder...")
         self.screen_recorder.start()
+        # Activate it to start capturing screenshots
+        self.screen_recorder.set_active(True)
         
         # Wait before starting processing thread
         time.sleep(2)
@@ -150,10 +152,9 @@ class SimpleCollector:
             self.keystroke_sanitizer.save_sanitized_json(sanitized, json_path)
             print(f"Processed final {len(events)} events")
         
-        # Deactivate the keystroke recorder (but don't fully stop it)
+        # Deactivate both recorders (but don't fully stop them)
         self.keystroke_recorder.set_active(False)
-        # Stop the screen recorder normally
-        self.screen_recorder.stop()
+        self.screen_recorder.set_active(False)
         
         self.running = False
         print("Recording stopped")
@@ -164,9 +165,12 @@ class SimpleCollector:
         if self.running:
             self.stop()
             
-        # Now properly shut down the keystroke recorder
+        # Now properly shut down both recorders
         print("Shutting down keystroke recorder completely...")
         self.keystroke_recorder.shutdown()
+        
+        print("Shutting down screen recorder completely...")
+        self.screen_recorder.shutdown()
         
         print("Application shutdown complete")
 

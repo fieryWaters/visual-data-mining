@@ -40,6 +40,7 @@ class InMemoryScreenRecorder:
         
         # Internal state
         self.running = False
+        self.active = False  # Whether to actually capture screenshots or not
         self.recording_thread = None
         self.stop_event = threading.Event()
         self.actual_fps = 0
@@ -62,41 +63,46 @@ class InMemoryScreenRecorder:
             start_time = time.time()
             last_report_time = start_time
             
-            # Main recording loop - capture as fast as possible
+            # Main recording loop - but only capture when active
             while not self.stop_event.is_set():
-                # Take screenshot as fast as the system allows
-                screenshot = pyautogui.screenshot()
-                timestamp = datetime.now().isoformat()
-                
-                # Add to buffer with thread safety
-                with self.lock:
-                    self.frames.append(screenshot)
-                    self.frame_times.append(timestamp)
+                # Only take screenshots if in active state
+                if self.active:
+                    # Take screenshot as fast as the system allows
+                    screenshot = pyautogui.screenshot()
+                    timestamp = datetime.now().isoformat()
                     
-                    # Maintain max size by removing oldest frames if needed
-                    while len(self.frames) > self.max_frames:
-                        self.frames.pop(0)
-                        self.frame_times.pop(0)
-                
-                # Update metrics
-                frame_count += 1
-                current_time = time.time()
-                elapsed = current_time - last_report_time
-                
-                """
-                # Report stats periodically (every 5 seconds)
-                if elapsed >= 5:
-                    self.actual_fps = frame_count / elapsed
-                    logger.info(f"Screen recording at {self.actual_fps:.2f} FPS, buffer: {len(self.frames)} frames, memory: {self.get_memory_usage_mb():.1f} MB")
-                    frame_count = 0
-                    last_report_time = current_time
-                """
+                    # Add to buffer with thread safety
+                    with self.lock:
+                        self.frames.append(screenshot)
+                        self.frame_times.append(timestamp)
+                        
+                        # Maintain max size by removing oldest frames if needed
+                        while len(self.frames) > self.max_frames:
+                            self.frames.pop(0)
+                            self.frame_times.pop(0)
+                    
+                    # Update metrics
+                    frame_count += 1
+                    current_time = time.time()
+                    elapsed = current_time - last_report_time
+                    
+                    """
+                    # Report stats periodically (every 5 seconds)
+                    if elapsed >= 5:
+                        self.actual_fps = frame_count / elapsed
+                        logger.info(f"Screen recording at {self.actual_fps:.2f} FPS, buffer: {len(self.frames)} frames, memory: {self.get_memory_usage_mb():.1f} MB")
+                        frame_count = 0
+                        last_report_time = current_time
+                    """
+                else:
+                    # When not active, just sleep to reduce CPU usage
+                    time.sleep(0.1)
                 
         except Exception as e:
             logger.error(f"Error in recording thread: {e}")
     
     def start(self):
-        """Start recording the screen to memory"""
+        """Initialize the screen recorder (but don't start capturing yet)"""
         import time
         
         if self.running:
@@ -113,6 +119,8 @@ class InMemoryScreenRecorder:
         time.sleep(1)
         
         self.running = True
+        # Start with active=False so it doesn't actually capture screenshots yet
+        self.active = False
         self.stop_event.clear()
         
         # Start recording thread
@@ -125,10 +133,42 @@ class InMemoryScreenRecorder:
         time.sleep(1)
         
         self.recording_thread.start()
-        print("Screen recorder started successfully")
+        print("Screen recorder thread started successfully (but not capturing)")
+    
+    def set_active(self, active_state):
+        """
+        Set whether the recorder should capture screenshots or idle.
+        
+        Args:
+            active_state: True to start capturing, False to pause
+        """
+        if not self.running:
+            print("Warning: Can't activate screen recorder that isn't running")
+            return False
+            
+        # Only log if there's an actual state change
+        if self.active != active_state:
+            self.active = active_state
+            print(f"Screen recorder {'activated' if active_state else 'deactivated'}")
+            if active_state:
+                # Clear buffer when starting fresh capture
+                with self.lock:
+                    self.frames = []
+                    self.frame_times = []
+        
+        return True
     
     def stop(self):
-        """Stop recording the screen"""
+        """Pause recording (but keep thread running)"""
+        if not self.running:
+            return
+        
+        # Just set to inactive rather than stopping the thread
+        self.active = False
+        logger.info(f"Screen recording paused. Stored {len(self.frames)} frames ({self.get_memory_usage_mb():.1f} MB)")
+    
+    def shutdown(self):
+        """Completely shut down the screen recorder (for app exit)"""
         if not self.running:
             return
         
@@ -141,7 +181,8 @@ class InMemoryScreenRecorder:
             self.recording_thread = None
         
         self.running = False
-        logger.info(f"Screen recording stopped. Stored {len(self.frames)} frames ({self.get_memory_usage_mb():.1f} MB)")
+        self.active = False
+        logger.info(f"Screen recorder shut down. Final buffer had {len(self.frames)} frames ({self.get_memory_usage_mb():.1f} MB)")
     
     def get_recent_frames(self, seconds=None, count=None):
         """

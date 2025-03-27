@@ -180,11 +180,11 @@ def run_app():
     root = tk.Tk()
     root.title("Data Collector")
     
-    # Initialize the display widget with our pre-started collector
+    # Initialize the display widget with our pre-initialized but inactive collector
     global collector  # Use the collector we started before the UI
     app = DisplayWidget(root)
     app.collector = collector  # Connect the pre-initialized collector
-    app.is_running = True  # Start in running state
+    app.is_running = False  # Start in inactive state
     
     # Create the control window
     sync_window = tk.Toplevel(root)
@@ -212,7 +212,7 @@ def run_app():
     # Status label
     status_label = tk.Label(
         sync_window,
-        text="Status: Running",  # Start with running status
+        text="Status: Not Running",  # Start with inactive status
         font=("Helvetica", 10),
         fg="white",
         bg="#2C2C2C"
@@ -243,8 +243,8 @@ def run_app():
     )
     add_pwd_button.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
 
-    # Set the initial state to running (green)
-    app.canvas.itemconfig(app.circle_id, fill="green")
+    # Set the initial state to not running (red)
+    app.canvas.itemconfig(app.circle_id, fill="red")
 
     # Update status periodically
     def update_status():
@@ -542,13 +542,15 @@ if __name__ == "__main__":
     # Start recording components but keep them inactive
     print("Initializing recording components in inactive state...")
     
+    # Start all components in inactive state
+    
     # Start the keystroke recorder but don't activate event processing
     collector.keystroke_recorder.start() 
     print("Keyboard listener initialized but not active")
     
-    # Initialize screen recorder but don't start recording yet
+    # Initialize screen recorder but don't start capturing
     collector.screen_recorder.start()
-    print("Screen recorder initialized")
+    print("Screen recorder initialized but not capturing")
     
     # Now start Tkinter with inactive collectors
     print("Now initializing Tkinter GUI...")
