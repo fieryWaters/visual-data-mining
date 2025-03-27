@@ -45,6 +45,7 @@ class KeystrokeRecorder:
         self.keyboard_listener = None
         self.mouse_listener = None
         self.running = False
+        self.active = False  # Whether to process events or ignore them
         self.pending_click = None
         self.pending_timer = None
         self.dbl_click_threshold = 0.3  # seconds
@@ -53,6 +54,10 @@ class KeystrokeRecorder:
     def on_key_press(self, key):
         """Handle key press events"""
         try:
+            # Skip processing if not active
+            if not self.active:
+                return
+                
             # Handle normal characters
             if hasattr(key, 'char'):
                 key_val = key.char
@@ -70,6 +75,10 @@ class KeystrokeRecorder:
     def on_key_release(self, key):
         """Handle key release events"""
         try:
+            # Skip processing if not active
+            if not self.active:
+                return
+                
             # Handle normal characters
             if hasattr(key, 'char'):
                 key_val = key.char
@@ -91,6 +100,10 @@ class KeystrokeRecorder:
         
     def on_click(self, x, y, button, pressed):
         """Handle mouse click events"""
+        # Skip processing if not active
+        if not self.active:
+            return
+            
         xi, yi = int(x), int(y)
         
         if pressed:
@@ -132,6 +145,10 @@ class KeystrokeRecorder:
             
     def on_scroll(self, x, y, dx, dy):
         """Handle mouse scroll events"""
+        # Skip processing if not active
+        if not self.active:
+            return
+            
         xi, yi = int(x), int(y)
         
         self.buffer.add_event({
@@ -193,13 +210,33 @@ class KeystrokeRecorder:
         # Only mark as running if at least one input method works
         if keyboard_available or mouse_available:
             self.running = True
+            # Note: We don't set active=True here - listeners are running but inactive
             print(f"Recorder running with keyboard={keyboard_available}, mouse={mouse_available}")
         else:
             print("ERROR: All input methods failed to start")
             return False
         
-    def stop(self):
-        """Stop recording keystrokes and mouse actions"""
+    def set_active(self, active_state):
+        """
+        Set whether the recorder should process events or ignore them.
+        This doesn't stop/start the listeners, just controls event processing.
+        
+        Args:
+            active_state: True to process events, False to ignore them
+        """
+        if not self.running:
+            print("Warning: Can't activate recorder that isn't running")
+            return False
+            
+        self.active = active_state
+        print(f"Recorder {'activated' if active_state else 'deactivated'} - events will be {'processed' if active_state else 'ignored'}")
+        return True
+        
+    def shutdown(self):
+        """
+        Completely stop recording and clean up listeners.
+        Only call this when the application is closing.
+        """
         if not self.running:
             return
             
@@ -222,7 +259,16 @@ class KeystrokeRecorder:
             self.mouse_listener = None
             
         self.running = False
-        print("Recorder stopped")
+        self.active = False
+        print("Recorder shut down")
+        
+    def stop(self):
+        """
+        Legacy method - now just deactivates the recorder without stopping listeners.
+        Maintained for backwards compatibility.
+        """
+        print("Warning: Using legacy stop() method - consider using set_active(False) instead")
+        return self.set_active(False)
         
     def get_buffer_contents(self, clear=False):
         """Get the contents of the buffer"""

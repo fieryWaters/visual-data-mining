@@ -98,9 +98,11 @@ class SimpleCollector:
             
         print("\nStarting recording components sequentially with delays...")
         
-        # Start keystroke recorder first
+        # Start keystroke recorder first in inactive state
         print("\n1. Starting keystroke recorder...")
         self.keystroke_recorder.start()
+        # Activate it to start processing events
+        self.keystroke_recorder.set_active(True)
         
         # Wait before starting next component
         time.sleep(2)
@@ -148,12 +150,25 @@ class SimpleCollector:
             self.keystroke_sanitizer.save_sanitized_json(sanitized, json_path)
             print(f"Processed final {len(events)} events")
         
-        # Stop collectors
-        self.keystroke_recorder.stop()
+        # Deactivate the keystroke recorder (but don't fully stop it)
+        self.keystroke_recorder.set_active(False)
+        # Stop the screen recorder normally
         self.screen_recorder.stop()
         
         self.running = False
         print("Recording stopped")
+        
+    def shutdown(self):
+        """Completely shut down all components and clean up (use on app exit)"""
+        # Make sure to stop recording first if it's running
+        if self.running:
+            self.stop()
+            
+        # Now properly shut down the keystroke recorder
+        print("Shutting down keystroke recorder completely...")
+        self.keystroke_recorder.shutdown()
+        
+        print("Application shutdown complete")
 
 if __name__ == "__main__":
     # Simple usage example
