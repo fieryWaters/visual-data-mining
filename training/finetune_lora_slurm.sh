@@ -18,7 +18,9 @@ echo "Starting training job number $JOB_NUM at $(date)"
 echo "Running on node: $(hostname)"
 
 # Set up environment
-source ~/git-repos/Visual-Data-Mining-AI-Model/venv_visual_data_mining/bin/activate
+source ~/git-repos/visual-data-mining/venv/bin/activate
+
+pip freeze
 
 # Set up wandb run ID tracking
 if [ $JOB_NUM -eq 1 ]; then
@@ -88,7 +90,7 @@ CUDA_VISIBLE_DEVICES=3 torchrun --nnodes 1 --nproc_per_node 1 finetuning.py \
     $peft_flag
 
    #test how good we did!
-   python3 accuracy_benchmark_synthetic.py
+   #python3 accuracy_benchmark_synthetic.py
 }
 
 # Create checkpoint root directory if it doesn't exist
