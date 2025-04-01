@@ -5,7 +5,6 @@ training/__pycache__/
 .ipynb_checkpoints/
 
 *.log
-training/logs/
 training/wandb/
 finetuned_model/
 data_processing/synthetic_dataset/
