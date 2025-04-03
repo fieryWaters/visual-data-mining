@@ -16,6 +16,91 @@ import re
 from utils.text_buffer import TextBuffer
 
 
+class ModifierKeysWidget(ttk.Frame):
+    """
+    Widget to display the state of modifier keys.
+    """
+    
+    def __init__(self, master, **kwargs):
+        """Initialize the modifier keys widget."""
+        super().__init__(master, **kwargs)
+        
+        # Define modifier keys to track - all variants map to a single display name
+        self.modifiers = {
+            'Key.shift': 'SHIFT',
+            'Key.shift_l': 'SHIFT',
+            'Key.shift_r': 'SHIFT',
+            
+            'Key.ctrl': 'CTRL',
+            'Key.ctrl_l': 'CTRL',
+            'Key.ctrl_r': 'CTRL',
+            
+            'Key.alt': 'ALT',
+            'Key.alt_l': 'ALT',
+            'Key.alt_r': 'ALT',
+            
+            'Key.cmd': 'CMD',
+            'Key.cmd_l': 'CMD',
+            'Key.cmd_r': 'CMD',
+            
+            'Key.caps_lock': 'CAPS',
+            'Key.tab': 'TAB',
+        }
+        
+        # List of unique modifier display names
+        display_names = ['SHIFT', 'CTRL', 'ALT', 'CMD', 'CAPS', 'TAB']
+        
+        # Create indicator labels
+        self.indicators = {}
+        
+        # Use a horizontal layout
+        for i, display_name in enumerate(display_names):
+            # Create indicator frame with border
+            indicator = ttk.Frame(self, borderwidth=2, relief=tk.GROOVE, width=50, height=30)
+            indicator.grid(row=0, column=i, padx=5, pady=5)
+            indicator.grid_propagate(False)  # Keep fixed size
+            
+            # Add label inside frame
+            label = ttk.Label(
+                indicator, 
+                text=display_name,
+                anchor=tk.CENTER,
+                background="#d3d3d3"  # Light gray (inactive state)
+            )
+            label.pack(fill=tk.BOTH, expand=True)
+            
+            # Store the label reference
+            self.indicators[display_name] = label
+        
+        # Current state of modifiers (counts for each modifier)
+        self.active_counts = {name: 0 for name in display_names}
+    
+    def update_modifier(self, key, is_pressed):
+        """Update the state of a modifier key."""
+        if key in self.modifiers:
+            display_name = self.modifiers[key]
+            
+            if is_pressed:
+                # Increment counter for this modifier
+                self.active_counts[display_name] += 1
+                # Activate the indicator if count is positive
+                if self.active_counts[display_name] > 0:
+                    self.indicators[display_name].configure(background="#4caf50")  # Green for active
+            else:
+                # Decrement counter, but don't go below zero
+                if self.active_counts[display_name] > 0:
+                    self.active_counts[display_name] -= 1
+                # Deactivate if count reaches zero
+                if self.active_counts[display_name] == 0:
+                    self.indicators[display_name].configure(background="#d3d3d3")  # Gray for inactive
+    
+    def clear_all(self):
+        """Reset all modifiers to inactive state."""
+        for display_name in self.active_counts:
+            self.active_counts[display_name] = 0
+            self.indicators[display_name].configure(background="#d3d3d3")  # Gray for inactive
+
+
 class DataPlayer:
     """
     Movie player for visualizing screen recordings with keystroke data.
@@ -107,10 +192,18 @@ class DataPlayer:
         self.text_frame.pack(fill=tk.X, side=tk.BOTTOM, padx=5, pady=5)
         self.text_frame.pack_propagate(False)  # Prevent frame from shrinking
         
+        # Create a sub-frame for modifier keys display
+        modifier_frame = ttk.Frame(self.text_frame)
+        modifier_frame.pack(fill=tk.X, side=tk.TOP, padx=5, pady=5)
+        
+        # Add modifier keys widget
+        self.modifier_keys = ModifierKeysWidget(modifier_frame)
+        self.modifier_keys.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5)
+        
         # Scrolled text widget for keystroke display
         self.text_display = tk.Text(
             self.text_frame, 
-            height=8, 
+            height=7,  # Reduced height to make room for modifier keys
             wrap=tk.WORD, 
             bg="#f0f0f0",
             font=("Courier", 12)
@@ -329,6 +422,9 @@ class DataPlayer:
         # Clear the text display
         self.text_display.delete("1.0", tk.END)
         
+        # Reset all modifier keys
+        self.modifier_keys.clear_all()
+        
         # Process events to generate text
         for _, event in events:
             event_type = event.get('event')
@@ -336,8 +432,19 @@ class DataPlayer:
             if event_type == 'KEY_PRESS':
                 key = event.get('key', '')
                 
+                # Update modifier keys display for special keys
+                if key.startswith('Key.'):
+                    self.modifier_keys.update_modifier(key, True)
+                
                 # Process the key using TextBuffer's process_keystroke method
                 self.text_buffer.process_keystroke(key, id(event))
+            
+            elif event_type == 'KEY_RELEASE':
+                key = event.get('key', '')
+                
+                # Update modifier keys display for special keys
+                if key.startswith('Key.'):
+                    self.modifier_keys.update_modifier(key, False)
             
             # Handle password found events
             elif event_type == 'PASSWORD_FOUND':
@@ -354,9 +461,6 @@ class DataPlayer:
                 self.text_buffer.process_keystroke(']', id(event))
         
         # Display the current buffer text
-        #temp = self.text_buffer.get_text()
-        #if len(temp) != 0:
-        #    print("here")
         self.text_display.insert(tk.END, self.text_buffer.get_text())
         self.text_display.see(tk.END)
     
@@ -453,8 +557,24 @@ class DataPlayer:
                         # Update our keystroke events
                         if event_data.get('event') == 'KEY_PRESS':
                             key = event_data.get('key', '')
+                            
+                            # Update modifier keys display for special keys
+                            if key.startswith('Key.'):
+                                def update_modifier_ui():
+                                    self.modifier_keys.update_modifier(key, True)
+                                self.master.after(0, update_modifier_ui)
+                                
                             # Process the key using TextBuffer's process_keystroke method
                             self.text_buffer.process_keystroke(key, id(event_data))
+                            
+                        elif event_data.get('event') == 'KEY_RELEASE':
+                            key = event_data.get('key', '')
+                            
+                            # Update modifier keys display for special keys
+                            if key.startswith('Key.'):
+                                def update_modifier_ui():
+                                    self.modifier_keys.update_modifier(key, False)
+                                self.master.after(0, update_modifier_ui)
                         
                         # Handle password found events
                         elif event_data.get('event') == 'PASSWORD_FOUND':
@@ -471,9 +591,11 @@ class DataPlayer:
                             self.text_buffer.process_keystroke(']', id(event_data))
                         
                         # Update the text display
-                        self.master.after(0, lambda: self.text_display.delete("1.0", tk.END))
-                        self.master.after(0, lambda: self.text_display.insert(tk.END, self.text_buffer.get_text()))
-                        self.master.after(0, lambda: self.text_display.see(tk.END))
+                        def update_text_ui():
+                            self.text_display.delete("1.0", tk.END)
+                            self.text_display.insert(tk.END, self.text_buffer.get_text())
+                            self.text_display.see(tk.END)
+                        self.master.after(0, update_text_ui)
                     except Exception as e:
                         print(f"Error processing keystroke: {e}")
                         print(f"Event: {event_data}")
@@ -506,6 +628,9 @@ class DataPlayer:
         self.playing = False
         self.play_btn.configure(text="Play")
         self.status_var.set("Playback complete")
+        
+        # Clear all modifier key indicators
+        self.modifier_keys.clear_all()
 
 
 def main():
