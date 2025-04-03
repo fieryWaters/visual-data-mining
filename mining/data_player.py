@@ -13,7 +13,213 @@ from datetime import datetime, timedelta
 import threading
 import glob
 import re
+import queue
+from threading import Lock
 from utils.text_buffer import TextBuffer
+
+
+class SharedState:
+    """
+    Thread-safe container for sharing state between GUI and worker threads.
+    """
+    
+    def __init__(self):
+        self.lock = Lock()
+        self.version = 0
+        
+        # Timeline information (set once at initialization)
+        self.timeline_start = None  # ISO timestamp
+        self.timeline_end = None    # ISO timestamp
+        self.timeline_duration = 0  # seconds
+        
+        # Control variables (modified by GUI thread)
+        self.elapsed_time = 0.0     # Current position in timeline (seconds)
+        self.is_playing = False     # Whether playback is active
+        
+        # Display state (modified by worker thread)
+        self.screenshot_path = None
+        self.text_content = ""
+        self.modifier_states = {}   # key -> is_pressed
+        
+    def gui_update(self, **kwargs):
+        """Update values that GUI thread controls."""
+        with self.lock:
+            for key, value in kwargs.items():
+                if key in ['elapsed_time', 'is_playing']:
+                    setattr(self, key, value)
+    
+    def worker_update(self, **kwargs):
+        """Update values from the worker thread, incrementing version."""
+        with self.lock:
+            for key, value in kwargs.items():
+                if key in ['screenshot_path', 'text_content', 'modifier_states']:
+                    setattr(self, key, value)
+            self.version += 1
+    
+    def init_timeline(self, start_time, end_time, duration):
+        """Initialize timeline information."""
+        with self.lock:
+            self.timeline_start = start_time
+            self.timeline_end = end_time
+            self.timeline_duration = duration
+    
+    def get_timing_info(self):
+        """Get timing information for GUI thread."""
+        with self.lock:
+            return {
+                'timeline_start': self.timeline_start,
+                'timeline_end': self.timeline_end,
+                'timeline_duration': self.timeline_duration,
+                'elapsed_time': self.elapsed_time,
+                'is_playing': self.is_playing
+            }
+    
+    def get_display_state(self):
+        """Get display state information (with version)."""
+        with self.lock:
+            return {
+                'version': self.version,
+                'screenshot_path': self.screenshot_path,
+                'text_content': self.text_content,
+                'modifier_states': self.modifier_states.copy(),
+            }
+
+
+class DisplayProcessor:
+    """
+    Background processor that calculates display state based on timeline position.
+    Reads the elapsed_time from shared state and updates the display output.
+    """
+    
+    def __init__(self, shared_state, screenshot_data, keystroke_data):
+        self.state = shared_state
+        self.screenshots = screenshot_data.get('screenshots', {})  # timestamp -> path
+        self.screenshot_times = screenshot_data.get('timestamps', [])
+        self.keystroke_data = keystroke_data
+        
+        self.running = False
+        self.thread = None
+        
+        # Timeline information
+        if self.screenshot_times:
+            duration = self._calculate_duration()
+            self.state.init_timeline(
+                self.screenshot_times[0],
+                self.screenshot_times[-1],
+                duration
+            )
+            print(f"Timeline initialized with duration: {duration} seconds")
+            
+    def _calculate_duration(self):
+        """Calculate total duration in seconds."""
+        if len(self.screenshot_times) < 2:
+            return 0.0
+            
+        start = datetime.fromisoformat(self.screenshot_times[0])
+        end = datetime.fromisoformat(self.screenshot_times[-1])
+        return (end - start).total_seconds()
+        
+    def start(self):
+        """Start the processor thread."""
+        if self.running:
+            return
+            
+        self.running = True
+        self.thread = threading.Thread(target=self._process_loop, daemon=True)
+        self.thread.start()
+        
+    def stop(self):
+        """Stop the processor thread."""
+        self.running = False
+        if self.thread:
+            self.thread.join(timeout=1.0)
+            self.thread = None
+            
+    def _process_loop(self):
+        """Main processing loop running in background thread."""
+        last_elapsed_time = -1  # Force initial update
+        update_interval = 1/30  # ~30 fps
+        last_update_time = 0
+        
+        while self.running:
+            now = time.time()
+            
+            # Only update at target frame rate
+            if now - last_update_time >= update_interval:
+                # Get current elapsed time (set by GUI thread)
+                timing = self.state.get_timing_info()
+                elapsed_time = timing['elapsed_time']
+                
+                # Only update if position has changed
+                if abs(elapsed_time - last_elapsed_time) > 0.001:
+                    self._update_display_for_position(elapsed_time)
+                    last_elapsed_time = elapsed_time
+                    
+                last_update_time = now
+            
+            # Sleep briefly to avoid excessive CPU
+            time.sleep(0.001)
+            
+    def _update_display_for_position(self, elapsed_time):
+        """Update the display state for a specific position."""
+        if not self.screenshot_times:
+            return
+            
+        try:
+            # Convert elapsed time to absolute timeline position
+            timing = self.state.get_timing_info()
+            start_dt = datetime.fromisoformat(timing['timeline_start'])
+            target_dt = start_dt + timedelta(seconds=elapsed_time)
+            target_iso = target_dt.isoformat()
+            
+            # Find the closest screenshot timestamp
+            closest_time = self.screenshot_times[0]
+            for ts in self.screenshot_times:
+                if ts <= target_iso:
+                    closest_time = ts
+                else:
+                    break
+            
+            # Get screenshot path
+            screenshot_path = self.screenshots.get(closest_time)
+            
+            # Process relevant keystrokes
+            text_buffer = TextBuffer()
+            modifier_states = {}
+            
+            # Get all events up to this position
+            events_up_to = [(ts, event) for ts, event in self.keystroke_data if ts <= target_iso]
+            
+            # Process each event
+            for _, event in events_up_to:
+                event_type = event.get('event', '')
+                key = event.get('key', '')
+                
+                # Process based on event type
+                if event_type == 'KEY_PRESS':
+                    if key and key.startswith('Key.'):
+                        modifier_states[key] = True
+                        
+                    if key:
+                        text_buffer.process_keystroke(key, id(event))
+                        
+                elif event_type == 'KEY_RELEASE':
+                    if key and key.startswith('Key.'):
+                        modifier_states[key] = False
+                        
+                elif event_type == 'PASSWORD_FOUND':
+                    for char in "[REDACTED]":
+                        text_buffer.process_keystroke(char, id(event))
+            
+            # Update the state with processed data (this will increment state version)
+            self.state.worker_update(
+                screenshot_path=screenshot_path,
+                text_content=text_buffer.get_text(),
+                modifier_states=modifier_states
+            )
+            
+        except Exception as e:
+            print(f"Error updating display: {e}")
 
 
 class ModifierKeysWidget(ttk.Frame):
@@ -112,35 +318,38 @@ class DataPlayer:
         self.screenshots_dir = os.path.join(self.logs_dir, 'screenshots')
         self.sanitized_dir = os.path.join(self.logs_dir, 'sanitized_json')
         
-        # Simple state machine
-        self.playing = False
-        self.start_time = None  # Reference point (in system time)
-        self.elapsed_time = 0.0  # Position in timeline (in seconds)
-        self.play_thread = None
-        self.stop_playback = threading.Event()
+        # Shared state between UI and worker threads
+        self.shared_state = SharedState()
+        self.processor = None
+        
+        # UI state
+        self.last_seen_version = 0
+        self.photo_image = None  # Keep a reference to prevent garbage collection
+        self.update_ui_timer_id = None
+        self.playback_timer_id = None
+        self.ui_update_interval = 33  # ms (about 30 fps)
+        self._scrubbing = False
+        self._last_image_path = None
+        
+        # Playback reference time (when playing)
+        self.reference_time = None
         
         # Data containers
         self.screenshots = {}  # Dictionary of timestamp -> filepath
         self.screenshot_times = []  # Ordered list of timestamps
         self.keystroke_data = []  # List of (timestamp, event) tuples
-        self.timeline_start = None  # First timestamp in dataset (ISO)
-        self.timeline_end = None    # Last timestamp in dataset (ISO)
-        self.timeline_duration = 0  # Total duration in seconds
         
         # Create UI
         self.create_ui()
-        
-        # Text buffer for processing keystrokes
-        self.text_buffer = TextBuffer()
-        
-        # Update display timer
-        self.update_timer_id = None
         
         # Load data if directories exist
         if os.path.exists(self.screenshots_dir) and os.path.exists(self.sanitized_dir):
             self.load_data()
         else:
             self.text_display.insert(tk.END, "Data directories not found. Please select a logs directory.")
+            
+        # Start the UI update timer
+        self.start_ui_updates()
     
     def create_ui(self):
         """Create the user interface."""
@@ -262,17 +471,104 @@ class DataPlayer:
         
         return f"{year}-{month}-{day}T{hour}:{minute}:{second}.{ms}"
     
+    def start_ui_updates(self):
+        """Start the UI update timer."""
+        self.update_ui()
+        
+    def update_ui(self):
+        """Update UI based on the current state."""
+        try:
+            # Get the latest display state from the worker thread
+            display = self.shared_state.get_display_state()
+            
+            # Only process if state has changed
+            if display['version'] > self.last_seen_version:
+                self.last_seen_version = display['version']
+                
+                # Update time display - calculated from elapsed time
+                timing = self.shared_state.get_timing_info()
+                if timing['timeline_start']:
+                    # Format timestamp
+                    start_dt = datetime.fromisoformat(timing['timeline_start'])
+                    current_dt = start_dt + timedelta(seconds=timing['elapsed_time'])
+                    formatted_time = current_dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                    self.time_var.set(formatted_time)
+                
+                # Calculate scrubber position
+                if timing['timeline_duration'] > 0 and not self._scrubbing:
+                    percentage = min(100, (timing['elapsed_time'] / timing['timeline_duration']) * 100)
+                    self.scrub_var.set(percentage)
+                
+                # Update play/pause button
+                self.play_btn.configure(text="Pause" if timing['is_playing'] else "Play")
+                
+                # Update text content
+                self.text_display.delete("1.0", tk.END)
+                self.text_display.insert(tk.END, display['text_content'])
+                self.text_display.see(tk.END)
+                
+                # Update modifier keys
+                self.modifier_keys.clear_all()
+                for key, is_pressed in display['modifier_states'].items():
+                    if is_pressed:
+                        self.modifier_keys.update_modifier(key, True)
+                
+                # Update image if changed
+                if display['screenshot_path'] and (not self._last_image_path or 
+                                                 self._last_image_path != display['screenshot_path']):
+                    self._last_image_path = display['screenshot_path']
+                    self.display_image(Image.open(display['screenshot_path']))
+        except Exception as e:
+            self.status_var.set(f"UI update error: {str(e)[:50]}...")
+        
+        # Schedule next update
+        self.update_ui_timer_id = self.master.after(self.ui_update_interval, self.update_ui)
+        
+    def update_playback_position(self):
+        """Update position during playback."""
+        if self.reference_time is not None:
+            # Get timing info
+            timing = self.shared_state.get_timing_info()
+            
+            # Calculate current elapsed time
+            elapsed_time = time.time() - self.reference_time
+            
+            # Check for end of timeline
+            if elapsed_time >= timing['timeline_duration']:
+                # At the end, stop playback and set position to end
+                self.stop_playback()
+                # Set to exact end position
+                self.shared_state.gui_update(elapsed_time=timing['timeline_duration'])
+                self.status_var.set("Playback complete - press Play to restart")
+            else:
+                # Update elapsed time
+                self.shared_state.gui_update(elapsed_time=elapsed_time)
+                
+                # Schedule next update
+                self.playback_timer_id = self.master.after(33, self.update_playback_position)
+    
     def load_data(self):
         """Load screenshots and keystroke data."""
         self.status_var.set("Loading data...")
         self.master.update_idletasks()
         
+        # Stop any existing processor
+        if self.processor:
+            self.processor.stop()
+            self.processor = None
+        
+        # Stop playback if active
+        self.stop_playback()
+        
         # Reset data
         self.screenshots = {}
         self.screenshot_times = []
         self.keystroke_data = []
-        self.text_buffer = TextBuffer()
-        self.elapsed_time = 0.0
+        self._scrubbing = False
+        self._last_image_path = None
+        
+        # Reset shared state
+        self.shared_state = SharedState()
         
         # Update directories from entry field
         self.logs_dir = self.dir_entry.get()
@@ -307,97 +603,81 @@ class DataPlayer:
             # Reset UI
             self.text_display.delete("1.0", tk.END)
             
-            # Calculate timeline range
-            if self.screenshot_times:
-                self.timeline_start = self.screenshot_times[0]
-                self.timeline_end = self.screenshot_times[-1]
-                
-                # Calculate total duration in seconds
-                start_dt = datetime.fromisoformat(self.timeline_start)
-                end_dt = datetime.fromisoformat(self.timeline_end)
-                self.timeline_duration = (end_dt - start_dt).total_seconds()
-                
-                # Initialize display at the beginning (0 elapsed time)
-                self.update_display_for_elapsed_time()
-                
-                self.status_var.set(
-                    f"Loaded {len(self.screenshots)} screenshots and {len(self.keystroke_data)} keystroke events"
-                )
-            else:
+            # Create screenshot data for the processor
+            screenshot_data = {
+                'screenshots': self.screenshots,
+                'timestamps': self.screenshot_times
+            }
+            
+            # Create and start the display processor
+            self.processor = DisplayProcessor(self.shared_state, screenshot_data, self.keystroke_data)
+            self.processor.start()
+            
+            # Set initial position
+            self.shared_state.gui_update(elapsed_time=0.0)
+            
+            # Wait briefly for processor to initialize
+            self.master.after(100, lambda: self.status_var.set(
+                f"Loaded {len(self.screenshots)} screenshots and {len(self.keystroke_data)} keystroke events"
+            ))
+            
+            if not self.screenshot_times:
                 self.status_var.set("No data found in selected directories")
         
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load data: {e}")
             self.status_var.set(f"Error: {e}")
-    
-                
-    def update_display_for_elapsed_time(self):
-        """Update the display based on the current elapsed time."""
-        if not self.timeline_start or not self.screenshot_times:
-            return
             
-        try:
-            # Convert elapsed time to absolute timeline position
-            start_dt = datetime.fromisoformat(self.timeline_start)
-            target_dt = start_dt + timedelta(seconds=self.elapsed_time)
-            target_iso = target_dt.isoformat()
+    def stop_playback(self):
+        """Stop active playback."""
+        # Cancel any playback timer
+        if self.playback_timer_id:
+            self.master.after_cancel(self.playback_timer_id)
+            self.playback_timer_id = None
             
-            # Find the closest screenshot timestamp
-            closest_time = self.screenshot_times[0]
-            for ts in self.screenshot_times:
-                if ts <= target_iso:
-                    closest_time = ts
-                else:
-                    break
-            
-            # Update the text buffer for this position
-            self.text_buffer = TextBuffer()
-            events_up_to = [(ts, event) for ts, event in self.keystroke_data if ts <= target_iso]
-            self.update_text_display(events_up_to)
-            
-            # Update the visual display
-            if closest_time in self.screenshots:
-                img = Image.open(self.screenshots[closest_time])
-                self.display_image(img)
-                
-                # Format timestamp for display
-                display_dt = start_dt + timedelta(seconds=self.elapsed_time)
-                formatted_time = display_dt.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                self.time_var.set(formatted_time)
-                
-                # Update scrub bar position (we handle this in the scrubber)
-                # Not updating the scrub bar here to avoid infinite loop
-                
-                # Update status bar
-                if not self.playing:
-                    percentage_int = int((self.elapsed_time / self.timeline_duration) * 100)
-                    self.status_var.set(f"Timeline position: {percentage_int}%")
-        except Exception as e:
-            self.status_var.set(f"Display error: {str(e)[:50]}...")
+        # Update shared state
+        self.shared_state.gui_update(is_playing=False)
+        
+        # Clear reference time
+        self.reference_time = None
     
     def on_scrub(self, value):
-        """Handle timeline scrubbing."""
-        if self.screenshot_times:
+        """Handle timeline scrubbing - direct UI control of elapsed time."""
+        if self.processor and self.screenshot_times:
             try:
+                # Mark that we're scrubbing
+                self._scrubbing = True
+                
                 # Convert percentage to elapsed time in seconds
                 percentage = float(value)
-                new_elapsed_time = (percentage / 100) * self.timeline_duration
+                timing = self.shared_state.get_timing_info()
+                timeline_duration = timing.get('timeline_duration', 0)
+                is_playing = timing.get('is_playing', False)
                 
-                # Update elapsed time
-                self.elapsed_time = new_elapsed_time
+                if timeline_duration > 0:
+                    # Calculate new elapsed time
+                    new_elapsed_time = (percentage / 100) * timeline_duration
+                    
+                    # Directly update shared state (no command queue)
+                    self.shared_state.gui_update(elapsed_time=new_elapsed_time)
+                    
+                    # If we're playing, update the reference time so playback continues from new position
+                    if is_playing:
+                        self.reference_time = time.time() - new_elapsed_time
+                    
+                    # Update status bar
+                    percentage_str = f"{int(percentage)}%"
+                    self.status_var.set(f"Timeline position: {percentage_str}")
                 
-                # If playing, adjust start time to maintain continuity
-                if self.playing:
-                    self.start_time = time.time() - self.elapsed_time
-                
-                # Update status
-                percentage_str = f"{int(percentage)}%"
-                self.status_var.set(f"Timeline position: {percentage_str}")
-                
-                # Manually trigger a single update after a slight delay
-                self.master.after(10, self.update_display_for_elapsed_time)
+                # Clear scrubbing flag after a short delay
+                self.master.after(200, self._clear_scrubbing_flag)
             except Exception as e:
                 self.status_var.set(f"Error during scrubbing: {str(e)[:50]}...")
+                self._clear_scrubbing_flag()
+                
+    def _clear_scrubbing_flag(self):
+        """Clear the scrubbing flag after a delay."""
+        self._scrubbing = False
     
     def display_image(self, img):
         """Resize and display an image on the canvas."""
@@ -420,8 +700,13 @@ class DataPlayer:
     
     def on_resize(self, event=None):
         """Redisplay current image when window resizes."""
-        # Just update the display using current elapsed time
-        self.update_display_for_elapsed_time()
+        # Refresh the current image if available
+        if hasattr(self, '_last_image_path') and self._last_image_path:
+            try:
+                img = Image.open(self._last_image_path)
+                self.display_image(img)
+            except Exception:
+                pass
     
     def process_keystroke_event(self, event, update_ui=False):
         """Process a keystroke event and update the UI if requested."""
@@ -489,78 +774,65 @@ class DataPlayer:
     
     def toggle_playback(self):
         """Toggle between play and pause."""
-        if not self.timeline_start:
+        if not self.processor:
             messagebox.showinfo("No Data", "No data loaded to play. Please select a logs directory.")
             return
             
-        if self.playing:
-            # PAUSE: Just flag we're no longer playing
-            self.playing = False
-            self.play_btn.configure(text="Play")
+        timing = self.shared_state.get_timing_info()
+        if timing['is_playing']:
+            # Pause playback
+            self.stop_playback()
             self.status_var.set("Paused")
-            
-            # Stop update timer
-            if self.update_timer_id:
-                self.master.after_cancel(self.update_timer_id)
-                self.update_timer_id = None
         else:
-            # PLAY: Set playing flag and start the update loop
-            self.playing = True
-            self.play_btn.configure(text="Pause")
+            # Start playback
+            self.start_playback()
             self.status_var.set("Playing")
             
-            # If we're at the end, restart from beginning
-            if self.elapsed_time >= self.timeline_duration:
-                self.elapsed_time = 0
-                self.update_display_for_elapsed_time()
-            
-            # Set start_time based on current elapsed time
-            self.start_time = time.time() - self.elapsed_time
-            
-            # Start update timer
-            self.update_playback_display()
-    
-    def update_playback_display(self):
-        """Update display during playback using timer-based approach."""
-        if not self.playing:
-            return
-            
-        try:
-            # Calculate current elapsed time based on start time
-            current_time = time.time()
-            self.elapsed_time = current_time - self.start_time
-            
-            # Check if we've reached the end
-            if self.elapsed_time >= self.timeline_duration:
-                # We're at the end, stop playback
-                self.playing = False
-                self.play_btn.configure(text="Play")
-                self.status_var.set("Playback complete - press Play to restart")
-                self.modifier_keys.clear_all()
-                
-                # Set to end for restart detection
-                self.elapsed_time = self.timeline_duration
-                self.update_display_for_elapsed_time()
-                
-                # Update scrubber to end position
-                self.scrub_bar.set(100)
-                return
-                
-            # Update display based on current elapsed time
-            self.update_display_for_elapsed_time()
-            
-            # Update scrubber position during playback (won't cause recursion during playback)
-            if self.timeline_duration > 0:
-                percentage = (self.elapsed_time / self.timeline_duration) * 100
-                self.scrub_bar.set(percentage)
-            
-            # Schedule next update (roughly 30 fps for smooth playback)
-            self.update_timer_id = self.master.after(33, self.update_playback_display)
+    def start_playback(self):
+        """Start playback from current position."""
+        # Get current timing info
+        timing = self.shared_state.get_timing_info()
         
-        except Exception as e:
-            self.status_var.set(f"Playback error: {str(e)[:50]}...")
-            self.playing = False
-            self.play_btn.configure(text="Play")
+        # Check if we need to restart from beginning
+        # This will happen if we're very close to the end (within 0.1 seconds)
+        threshold = 0.1
+        if timing['elapsed_time'] >= (timing['timeline_duration'] - threshold):
+            # Reset to beginning
+            self.shared_state.gui_update(elapsed_time=0.0)
+            timing['elapsed_time'] = 0.0
+        
+        # Set reference time based on current elapsed time
+        self.reference_time = time.time() - timing['elapsed_time']
+        
+        # Set playing state
+        self.shared_state.gui_update(is_playing=True)
+        
+        # Start playback update timer
+        self.update_playback_position()
+            
+    def __del__(self):
+        """Clean up resources."""
+        # Stop UI updates
+        if hasattr(self, 'update_ui_timer_id') and self.update_ui_timer_id:
+            try:
+                self.master.after_cancel(self.update_ui_timer_id)
+            except Exception:
+                pass
+        
+        # Stop playback timer
+        if hasattr(self, 'playback_timer_id') and self.playback_timer_id:
+            try:
+                self.master.after_cancel(self.playback_timer_id)
+            except Exception:
+                pass
+        
+        # Stop the processor
+        if hasattr(self, 'processor') and self.processor:
+            try:
+                self.processor.stop()
+            except Exception:
+                pass
+    
 
 
 def main():
