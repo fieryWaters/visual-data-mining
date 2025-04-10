@@ -8,7 +8,6 @@ import os
 import sys
 import shutil
 import subprocess
-import argparse
 import glob
 from pathlib import Path
 
@@ -220,15 +219,9 @@ def build_application(onefile=True, debug=False, clean_after=True):
         return False
 
 def main():
-    """Main function to parse arguments and build the application."""
-    parser = argparse.ArgumentParser(description="Build the Visual Data Mining application.")
-    parser.add_argument("--onedir", action="store_true", help="Create a directory with multiple files instead of a single executable")
-    parser.add_argument("--debug", action="store_true", help="Add debug options for troubleshooting")
-    parser.add_argument("--no-cleanup", action="store_true", help="Keep build artifacts and don't move executable to main directory")
-    args = parser.parse_args()
-    
-    print("=== Visual Data Mining Application Builder ===\n")
-    print("Building a standalone single file executable by default.\n")
+    """Main function to build the application."""
+    print("=== Data Collection GUI Builder ===\n")
+    print("Building a standalone executable...\n")
     
     if not check_pyinstaller():
         return 1
@@ -236,9 +229,8 @@ def main():
     if not create_build_directories():
         return 1
     
-    # Use onefile=True by default, only use onedir if explicitly requested
-    # Clean up build artifacts by default unless --no-cleanup is specified
-    if not build_application(onefile=not args.onedir, debug=args.debug, clean_after=not args.no_cleanup):
+    # Build a single file executable and clean up afterwards
+    if not build_application(onefile=True, debug=False, clean_after=True):
         return 1
     
     print("\nBuild process completed.")
