@@ -10,18 +10,28 @@ Privacy-preserving keystroke and screen recording tool with password sanitizatio
 py -3.11 -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
+
+# Build data collection GUI (default)
 python build_app.py
+
+# Build data player
+python build_app.py data_player.py
 ```
-The executable will be created as `data_collection_GUI.exe`
+Executables will be created as `data_collection_GUI.exe` and/or `data_player.exe`
 
 ### Linux
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# Build data collection GUI (default)
 python build_app.py
+
+# Build data player
+python build_app.py data_player.py
 ```
-The executable will be created as `data_collection_GUI`
+Executables will be created as `data_collection_GUI` and/or `data_player`
 
 ## Running the Tool
 Simply launch the executable file created above or run the GUI directly:

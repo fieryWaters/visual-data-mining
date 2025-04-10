@@ -2,6 +2,10 @@
 """
 Build script for packaging the Visual Data Mining application with PyInstaller.
 Creates a standalone executable with all dependencies included.
+
+Usage:
+  python build_app.py                         # Builds data_collection_GUI by default
+  python build_app.py data_player.py          # Builds the data player
 """
 
 import os
@@ -10,6 +14,7 @@ import shutil
 import subprocess
 import glob
 from pathlib import Path
+import fire
 
 def check_pyinstaller():
     """Check if PyInstaller is installed, install if not."""
@@ -97,28 +102,25 @@ def cleanup_build_artifacts(source_path, executable_name, onefile=True):
         print(f"Error during cleanup: {e}")
         return False
 
-def build_application(onefile=True, debug=False, clean_after=True):
+def build_application(entry_point="data_collection_GUI.py", onefile=True, debug=False, clean_after=True):
     """
     Build the application using PyInstaller with all necessary options.
     
     Args:
+        entry_point: Python file to build (default: data_collection_GUI.py)
         onefile: If True, create a single executable file instead of a directory
         debug: If True, add debug options for troubleshooting
         clean_after: If True, clean up build artifacts and move executable to main directory
     """
-    # Entry point file (the main script to execute)
-    entry_point = "data_collection_GUI.py"
-    
     # Check if the entry point exists
     if not os.path.exists(entry_point):
         print(f"Error: Entry point {entry_point} not found.")
         return False
         
-    # If you change the class name inside data_collection_GUI.py, 
-    # you don't need to modify anything here - PyInstaller will handle it
+    # Get application name from the entry point filename (without .py extension)
+    app_name = os.path.splitext(os.path.basename(entry_point))[0]
     
-    # Application name for the output
-    app_name = "data_collection_GUI"
+    print(f"Building {app_name} from {entry_point}...")
     
     # Basic command with required options
     cmd = [
@@ -218,10 +220,15 @@ def build_application(onefile=True, debug=False, clean_after=True):
         print(f"\nError during build: {e}")
         return False
 
-def main():
-    """Main function to build the application."""
-    print("=== Data Collection GUI Builder ===\n")
-    print("Building a standalone executable...\n")
+def main(entry_point="data_collection_GUI.py"):
+    """
+    Main function to build the application.
+    
+    Args:
+        entry_point: Python file to build (default: data_collection_GUI.py)
+    """
+    print(f"=== Visual Data Mining App Builder ===\n")
+    print(f"Building {entry_point} as a standalone executable...\n")
     
     if not check_pyinstaller():
         return 1
@@ -230,11 +237,12 @@ def main():
         return 1
     
     # Build a single file executable and clean up afterwards
-    if not build_application(onefile=True, debug=False, clean_after=True):
+    if not build_application(entry_point=entry_point, onefile=True, debug=False, clean_after=True):
         return 1
     
-    print("\nBuild process completed.")
+    app_name = os.path.splitext(os.path.basename(entry_point))[0]
+    print(f"\nBuild process completed. Executable created: {app_name}{'.exe' if sys.platform == 'win32' else ''}")
     return 0
 
 if __name__ == "__main__":
-    sys.exit(main())
+    fire.Fire(main)
