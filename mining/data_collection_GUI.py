@@ -12,32 +12,35 @@ from simple_collector import SimpleCollector
 class DisplayWidget:
     def __init__(self, master, collector=None):
         self.master = master
-        self.master.title("Data Collection Widget")
-        self.master.overrideredirect(True)
-
-        self.master.attributes('-topmost', True)
-
-        # Dark background color for the root window
-        self.master.configure(bg="#2C2C2C")
-
-        # Position the window at bottom-right corner
-        screen_width = self.master.winfo_screenwidth()
-        screen_height = self.master.winfo_screenheight()
+        self.master.title("Data Collection Control")
+        
+        # Create a separate top-level window for the dot indicator
+        self.dot_window = tk.Toplevel(master)
+        self.dot_window.title("Indicator")
+        self.dot_window.overrideredirect(True)
+        self.dot_window.attributes('-topmost', True)
+        
+        # Dark background color for the dot window
+        self.dot_window.configure(bg="#2C2C2C")
+        
+        # Position the dot window at bottom-right corner
+        screen_width = self.dot_window.winfo_screenwidth()
+        screen_height = self.dot_window.winfo_screenheight()
         window_width, window_height = 50, 50
         x = screen_width - window_width - 10
         y = screen_height - window_height - 50
-        self.master.geometry(f"{window_width}x{window_height}+{x}+{y}")
-
+        self.dot_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
         # Data collector integration
         self.collector = collector
-
+        
         # Track states
         self.is_running = False
         self.is_loading = False
-
-        # Create a canvas to hold the circle
+        
+        # Create a canvas to hold the circle (in the dot window)
         self.canvas = tk.Canvas(
-            master, 
+            self.dot_window, 
             width=40, 
             height=40, 
             highlightthickness=0, 
@@ -45,16 +48,19 @@ class DisplayWidget:
             bg="#2C2C2C"
         )
         self.canvas.pack(expand=True, fill="both")
-
+        
         # Draw the circle (initially red)
         self.circle_id = self.canvas.create_oval(5, 5, 40, 40, fill="red", outline="")
-
+        
         # Bind a mouse click on the canvas to toggle the state
         self.canvas.bind("<Button-1>", self.toggle_state)
-
-        # Make the window draggable (since it has no border)
-        self.master.bind("<ButtonPress-1>", self.start_move)
-        self.master.bind("<B1-Motion>", self.do_move)
+        
+        # Make the dot window draggable (since it has no border)
+        self.dot_window.bind("<ButtonPress-1>", self.start_move)
+        self.dot_window.bind("<B1-Motion>", self.do_move)
+        
+        # Connect the windows - closing main window will close dot window
+        self.master.protocol("WM_DELETE_WINDOW", self.on_master_close)
 
     def toggle_state(self, event=None):
         """
@@ -134,10 +140,11 @@ class DisplayWidget:
     def _prompt_for_password(self):
         """Prompt for password on the main thread and initialize collector"""
         try:
+            # Use main window as parent for the dialog, not the dot window
             password = simpledialog.askstring("Password", 
                                             "Enter encryption password:", 
                                             show='*',
-                                            parent=self.master)
+                                            parent=self.master)  # Main control window
             
             if not password:
                 self.canvas.itemconfig(self.circle_id, fill="red")
@@ -164,21 +171,45 @@ class DisplayWidget:
         self.canvas.itemconfig(self.circle_id, fill="blue")
 
     def start_move(self, event):
-        """Remember the click position so we can move the window."""
+        """Remember the click position so we can move the dot window."""
         self._x = event.x
         self._y = event.y
 
     def do_move(self, event):
-        """Reposition the window based on mouse movement."""
+        """Reposition the dot window based on mouse movement."""
         dx = event.x - self._x
         dy = event.y - self._y
-        x0 = self.master.winfo_x() + dx
-        y0 = self.master.winfo_y() + dy
-        self.master.geometry(f"+{x0}+{y0}")
+        x0 = self.dot_window.winfo_x() + dx
+        y0 = self.dot_window.winfo_y() + dy
+        self.dot_window.geometry(f"+{x0}+{y0}")
+        
+    def on_master_close(self):
+        """Handle main window closing - ensure both windows close."""
+        try:
+            # Stop data collection if running
+            if self.collector and self.is_running:
+                self.collector.stop()
+            # Shutdown completely
+            if self.collector:
+                self.collector.shutdown()
+            # Destroy both windows
+            self.dot_window.destroy()
+            self.master.destroy()
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
+            # Force destroy if there's an error
+            try:
+                self.dot_window.destroy()
+                self.master.destroy()
+            except:
+                pass
 
 def run_app():
+    # Create the main window with a title bar that can be minimized
     root = tk.Tk()
-    root.title("Data Collector")
+    root.title("Visual Data Mining Control")
+    root.geometry("300x220+100+100")
+    root.configure(bg="#2C2C2C")
     
     # Initialize the display widget with our pre-initialized but inactive collector
     global collector  # Use the collector we started before the UI
@@ -186,22 +217,16 @@ def run_app():
     app.collector = collector  # Connect the pre-initialized collector
     app.is_running = False  # Start in inactive state
     
-    # Create the control window
-    sync_window = tk.Toplevel(root)
-    sync_window.title("Data Collection Controls")
-    sync_window.configure(bg="#2C2C2C")
-    sync_window.geometry("300x220+100+100")
-
-    # Configure grid layout
-    sync_window.columnconfigure(0, weight=1)
-    sync_window.rowconfigure(0, weight=1)
-    sync_window.rowconfigure(1, weight=1)
-    sync_window.rowconfigure(2, weight=1)
-    sync_window.rowconfigure(3, weight=1)
+    # Configure grid layout for main window
+    root.columnconfigure(0, weight=1)
+    root.rowconfigure(0, weight=1)
+    root.rowconfigure(1, weight=1)
+    root.rowconfigure(2, weight=1)
+    root.rowconfigure(3, weight=1)
 
     # App title
     title_label = tk.Label(
-        sync_window,
+        root,
         text="Visual Data Mining",
         font=("Helvetica", 14, "bold"),
         fg="white",
@@ -211,7 +236,7 @@ def run_app():
 
     # Status label
     status_label = tk.Label(
-        sync_window,
+        root,
         text="Status: Not Running",  # Start with inactive status
         font=("Helvetica", 10),
         fg="white",
@@ -221,7 +246,7 @@ def run_app():
 
     # Sync button
     sync_button = tk.Button(
-        sync_window,
+        root,
         text="Sync Data",
         font=("Helvetica", 12, "bold"),
         fg="white",
@@ -233,7 +258,7 @@ def run_app():
 
     # Add password button
     add_pwd_button = tk.Button(
-        sync_window,
+        root,
         text="Add Password",
         font=("Helvetica", 12, "bold"),
         fg="white",
@@ -262,10 +287,11 @@ def run_app():
         except Exception as e:
             print(f"Error updating status: {e}")
     
-    # Set up window close handlers
-    def on_close():
+    # Set up additional window close handler for the main window
+    # (DisplayWidget already has a handler for the root window)
+    def on_dot_close():
         try:
-            print("Closing application...")
+            print("Dot window closed, shutting down application...")
             if app.collector:
                 print("Performing full shutdown of data collectors...")
                 if app.is_running:
@@ -278,15 +304,11 @@ def run_app():
             print(f"Error during shutdown: {e}")
             root.destroy()
     
-    root.protocol("WM_DELETE_WINDOW", on_close)
-    sync_window.protocol("WM_DELETE_WINDOW", on_close)
+    # Set close handler for the dot window
+    app.dot_window.protocol("WM_DELETE_WINDOW", on_dot_close)
     
     # Initial status update and start event loop
     update_status()
-    
-    # Make sure parent window stays on top of taskbar but below control window
-    root.attributes("-topmost", True)
-    sync_window.transient(root)
     
     # Start the application
     print("GUI initialized and ready")
@@ -307,10 +329,11 @@ def add_password(app):
         messagebox.showerror("Error", "Data collector not initialized. Start collection first.")
         return
 
+    # Use the main window as parent for the dialog
     password = simpledialog.askstring("Add Password", 
                                      "Enter password to sanitize:", 
                                      show='*',
-                                     parent=app.master)
+                                     parent=app.master)  # master is the main control window
     if password:
         try:
             app.collector.add_password(password)
@@ -422,26 +445,25 @@ def run_tkinter_in_thread():
     """Run the Tkinter main loop in its own dedicated thread."""
     try:
         print("Starting Tkinter in dedicated thread...")
-        # Create and configure the GUI
+        # Create and configure the main GUI window with standard decorations
         root = tk.Tk()
+        root.title("Visual Data Mining Control")
+        root.geometry("300x220+100+100")
+        root.configure(bg="#2C2C2C")
+        
+        # Create the display widget with separate dot indicator
         app = DisplayWidget(root)
         
-        # Create the control window
-        sync_window = tk.Toplevel(root)
-        sync_window.title("Data Collection Controls")
-        sync_window.configure(bg="#2C2C2C")
-        sync_window.geometry("300x220+100+100")
-        
-        # Configure grid layout
-        sync_window.columnconfigure(0, weight=1)
-        sync_window.rowconfigure(0, weight=1)
-        sync_window.rowconfigure(1, weight=1)
-        sync_window.rowconfigure(2, weight=1)
-        sync_window.rowconfigure(3, weight=1)
+        # Configure grid layout for main window
+        root.columnconfigure(0, weight=1)
+        root.rowconfigure(0, weight=1)
+        root.rowconfigure(1, weight=1)
+        root.rowconfigure(2, weight=1)
+        root.rowconfigure(3, weight=1)
         
         # App title
         title_label = tk.Label(
-            sync_window,
+            root,
             text="Visual Data Mining",
             font=("Helvetica", 14, "bold"),
             fg="white",
@@ -451,7 +473,7 @@ def run_tkinter_in_thread():
         
         # Status label
         status_label = tk.Label(
-            sync_window,
+            root,
             text="Status: Not Running",
             font=("Helvetica", 10),
             fg="white",
@@ -461,7 +483,7 @@ def run_tkinter_in_thread():
         
         # Sync button
         sync_button = tk.Button(
-            sync_window,
+            root,
             text="Sync Data",
             font=("Helvetica", 12, "bold"),
             fg="white",
@@ -473,7 +495,7 @@ def run_tkinter_in_thread():
         
         # Add password button
         add_pwd_button = tk.Button(
-            sync_window,
+            root,
             text="Add Password",
             font=("Helvetica", 12, "bold"),
             fg="white",
@@ -499,27 +521,22 @@ def run_tkinter_in_thread():
             except Exception as e:
                 print(f"Error updating status: {e}")
         
-        # Set up window close handlers
-        def on_close():
+        # Set up additional window close handler for the dot window
+        def on_dot_close():
             try:
-                print("Closing application...")
-                if app.is_running and app.collector:
-                    print("Stopping data collection before exit...")
+                print("Dot window closed, shutting down application...")
+                if app.collector and app.is_running:
                     app.collector.stop()
                 root.destroy()
             except Exception as e:
                 print(f"Error during shutdown: {e}")
                 root.destroy()
         
-        root.protocol("WM_DELETE_WINDOW", on_close)
-        sync_window.protocol("WM_DELETE_WINDOW", on_close)
+        # Set handlers for window closing
+        app.dot_window.protocol("WM_DELETE_WINDOW", on_dot_close)
         
         # Initial status update
         update_status()
-        
-        # Make sure parent window stays on top of taskbar but below control window
-        root.attributes("-topmost", True)
-        sync_window.transient(root)
         
         print("Tkinter thread: GUI initialized and ready")
         root.mainloop()
