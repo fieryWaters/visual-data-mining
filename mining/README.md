@@ -1,67 +1,54 @@
-# Computer Interaction Mining
+# Visual Data Mining
 
-Privacy-preserving keystroke and screen recording with sanitization.
+Privacy-preserving keystroke and screen recording tool with password sanitization.
 
-## Components
+## Build Instructions
 
-- **keystroke_recorder.py**: Captures keystrokes in real-time
-- **keystroke_sanitizer.py**: Detects and redacts passwords
-- **screen_recorder.py**: In-memory screenshot recorder
-- **data_collector.py**: Main controller
-
-**Utils:**
-- **password_manager.py**: Secure password storage
-- **text_buffer.py**: Keystroke-to-text conversion
-- **fuzzy_matcher.py**: Password detection algorithms
-
-## Setup
-
+### Windows
 ```bash
-# Run setup script
-./setup.sh
+# Open cmd.exe and ensure Python 3.11 is installed
+py -3.11 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python build_app.py
+```
+The executable will be created as `data_collection_GUI.exe`
 
-# Or activate existing environment
-source venv/bin/activate
+### Linux
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python build_app.py
+```
+The executable will be created as `data_collection_GUI`
+
+## Running the Tool
+Simply launch the executable file created above or run the GUI directly:
+```bash
+python3 data_collection_GUI.py
 ```
 
-## Usage
+## Module Descriptions
 
-```bash
-# Run data collector
-python3 data_collector.py [options]
+- **data_collection_GUI.py**: Main GUI application with real-time recording controls
+- **simple_collector.py**: Core controller integrating all recording components
+- **keystroke_recorder.py**: Records keyboard and mouse inputs with event timestamps
+- **screen_recorder.py**: In-memory screenshot recorder optimized for performance
+- **keystroke_sanitizer.py**: Detects and removes passwords from keystroke data
+- **data_player.py**: Tool to review and replay captured data
 
-# Options:
-# --no-screen          Disable screen recording
-# --screen-minutes N   Minutes to keep in buffer (default: 10)
-# --screen-fps N       Frames per second (default: 5)
-# --output-dir DIR     Log directory (default: "logs")
-# --add-password PWD   Add password to sanitize
-# --process-interval N Process every N seconds (default: 10)
-```
+## Utils
+- **password_manager.py**: Encrypted password storage with secure loading/saving
+- **text_buffer.py**: Converts keystroke events to text with editing support
+- **fuzzy_matcher.py**: Advanced algorithms for password detection
 
 ## Testing
-
 ```bash
-# Run all tests
-python run_tests.py
-
-# Run specific tests
-python run_tests.py sanitizer
-python run_tests.py fuzzy_matcher
-python run_tests.py password_manager
-python run_tests.py text_buffer
+python3 run_tests.py
 ```
 
-## Privacy Features
-
-- Detects and redacts passwords using fuzzy matching
-- Handles text editing (backspace, deletion)
-- Preserves non-sensitive information
-- Raw keystroke data never written to disk
-
-## Password Detection
-
-1. Events → Text conversion via TextBuffer
-2. FuzzyMatcher analyzes text and buffer history
-3. Multiple detection strategies with thresholds
-4. Detected passwords replaced with [REDACTED]
+## Privacy 
+- All sensitive data is sanitized before storage
+- Passwords are detected and replaced with [REDACTED]
+- Raw keystroke data is never written directly to disk
