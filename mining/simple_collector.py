@@ -27,7 +27,6 @@ class SimpleCollector:
         
         # Initialize file paths
         self.output_dir = output_dir
-        self.log_file = os.path.join(output_dir, 'log.jsonl')
         
         # Set up password encryption
         self.keystroke_sanitizer.setup_encryption(password)
@@ -63,9 +62,6 @@ class SimpleCollector:
                 if events:
                     # Sanitize events
                     sanitized = self.keystroke_sanitizer.process_events(events)
-                    
-                    # Save to log file
-                    self.keystroke_sanitizer.save_to_log(sanitized, self.log_file)
                     
                     # Save as JSON file
                     buffer_count += 1
@@ -144,7 +140,6 @@ class SimpleCollector:
             
             # Process and save
             sanitized = self.keystroke_sanitizer.process_events(events)
-            self.keystroke_sanitizer.save_to_log(sanitized, self.log_file)
             
             # Save as final JSON
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

@@ -247,19 +247,6 @@ class KeystrokeSanitizer:
             "buffer_states": buffer_states
         }
     
-    def save_to_log(self, sanitized_data: Dict[str, Any], log_file: str) -> None:
-        """Save sanitized data to a log file"""
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
-        
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "events": sanitized_data["events"],
-            "sanitized_text": sanitized_data["sanitized_text"],
-            "password_detected": len(sanitized_data["password_locations"]) > 0
-        }
-        
-        with open(log_file, "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
             
     def save_sanitized_json(self, sanitized_data: Dict[str, Any], output_file: str) -> bool:
         """Save sanitized keystroke data to a JSON file"""

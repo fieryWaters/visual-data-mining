@@ -23,15 +23,18 @@ class InMemoryScreenRecorder:
     Optimized for performance by keeping everything in RAM.
     """
     
-    def __init__(self, max_frames=30):
+    def __init__(self, max_frames=30, target_fps=3):
         """
         Initialize the in-memory screen recorder.
         
         Args:
             max_frames: Maximum number of frames to keep in memory
+            target_fps: Target frames per second (default: 3)
         """
         # Configuration
         self.max_frames = max_frames
+        self.target_fps = target_fps
+        self.frame_interval = 1.0 / self.target_fps
         
         # Memory buffer for screenshots
         self.frames = []
@@ -67,7 +70,10 @@ class InMemoryScreenRecorder:
             while not self.stop_event.is_set():
                 # Only take screenshots if in active state
                 if self.active:
-                    # Take screenshot as fast as the system allows
+                    # Capture start time before taking screenshot
+                    frame_start_time = time.time()
+                    
+                    # Take screenshot
                     screenshot = pyautogui.screenshot()
                     timestamp = datetime.now().isoformat()
                     
@@ -94,6 +100,14 @@ class InMemoryScreenRecorder:
                         frame_count = 0
                         last_report_time = current_time
                     """
+                    
+                    # Calculate elapsed time for this frame and sleep if needed
+                    frame_elapsed = time.time() - frame_start_time
+                    remaining_time = self.frame_interval - frame_elapsed
+                    
+                    # Only sleep if we have time remaining in this frame interval
+                    if remaining_time > 0:
+                        time.sleep(remaining_time)
                 else:
                     # When not active, just sleep to reduce CPU usage
                     time.sleep(0.1)
