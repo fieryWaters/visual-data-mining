@@ -9,6 +9,7 @@ import sys
 import shutil
 import subprocess
 import argparse
+import glob
 from pathlib import Path
 
 def check_pyinstaller():
@@ -46,13 +47,65 @@ def create_build_directories():
     
     return True
 
-def build_application(onefile=True, debug=False):
+def cleanup_build_artifacts(source_path, executable_name, onefile=True):
+    """
+    Clean up PyInstaller build artifacts and move executable to main directory.
+    
+    Args:
+        source_path: Path to the generated executable
+        executable_name: Name of the executable file
+        onefile: Whether the build was a single file or directory
+    
+    Returns:
+        bool: True if cleanup was successful, False otherwise
+    """
+    try:
+        # Move the executable to the main directory
+        if os.path.exists(source_path):
+            print(f"Moving executable to main directory...")
+            shutil.copy2(source_path, executable_name)
+            print(f"Executable copied to {executable_name}")
+        else:
+            print(f"Warning: Could not find executable at {source_path}")
+            return False
+        
+        # Remove .spec file(s)
+        for spec_file in glob.glob("*.spec"):
+            print(f"Removing spec file: {spec_file}")
+            os.remove(spec_file)
+        
+        # Remove build directory
+        if os.path.exists("build"):
+            print("Removing build directory...")
+            shutil.rmtree("build")
+        
+        # Remove dist directory
+        if os.path.exists("dist"):
+            print("Removing dist directory...")
+            shutil.rmtree("dist")
+        
+        # Check if everything worked
+        cleanup_success = (
+            not os.path.exists("build") and
+            not os.path.exists("dist") and
+            len(glob.glob("*.spec")) == 0 and
+            os.path.exists(executable_name)
+        )
+        
+        return cleanup_success
+    
+    except Exception as e:
+        print(f"Error during cleanup: {e}")
+        return False
+
+def build_application(onefile=True, debug=False, clean_after=True):
     """
     Build the application using PyInstaller with all necessary options.
     
     Args:
         onefile: If True, create a single executable file instead of a directory
         debug: If True, add debug options for troubleshooting
+        clean_after: If True, clean up build artifacts and move executable to main directory
     """
     # Entry point file (the main script to execute)
     entry_point = "data_collection_GUI.py"
@@ -141,11 +194,24 @@ def build_application(onefile=True, debug=False):
         print("\nBuild completed successfully!")
         
         # Show output location
+        executable_ext = '.exe' if sys.platform == 'win32' else ''
+        executable_name = f"{app_name}{executable_ext}"
+        
         if onefile:
-            print(f"\nExecutable created at: dist/{app_name}{'.exe' if sys.platform == 'win32' else ''}")
+            source_path = f"dist/{executable_name}"
+            print(f"\nExecutable created at: {source_path}")
         else:
+            source_path = f"dist/{app_name}/{executable_name}"
             print(f"\nApplication directory created at: dist/{app_name}/")
-            print(f"Run with: dist/{app_name}/{app_name}{'.exe' if sys.platform == 'win32' else ''}")
+            print(f"Run with: {source_path}")
+        
+        # Clean up build artifacts if requested
+        if clean_after:
+            success = cleanup_build_artifacts(source_path, executable_name, onefile)
+            if success:
+                print(f"\nCleanup completed. Executable is now in the main directory: {executable_name}")
+            else:
+                print("\nWarning: Cleanup failed. Build artifacts remain.")
         
         return True
     
@@ -158,6 +224,7 @@ def main():
     parser = argparse.ArgumentParser(description="Build the Visual Data Mining application.")
     parser.add_argument("--onedir", action="store_true", help="Create a directory with multiple files instead of a single executable")
     parser.add_argument("--debug", action="store_true", help="Add debug options for troubleshooting")
+    parser.add_argument("--no-cleanup", action="store_true", help="Keep build artifacts and don't move executable to main directory")
     args = parser.parse_args()
     
     print("=== Visual Data Mining Application Builder ===\n")
@@ -170,7 +237,8 @@ def main():
         return 1
     
     # Use onefile=True by default, only use onedir if explicitly requested
-    if not build_application(onefile=not args.onedir, debug=args.debug):
+    # Clean up build artifacts by default unless --no-cleanup is specified
+    if not build_application(onefile=not args.onedir, debug=args.debug, clean_after=not args.no_cleanup):
         return 1
     
     print("\nBuild process completed.")
