@@ -21,7 +21,8 @@ Executables will be created as `data_collection_GUI.exe` and/or `data_player.exe
 
 ### Linux
 ```bash
-python3 -m venv .venv
+brew install python@3.11
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
