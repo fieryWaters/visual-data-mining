@@ -1,4 +1,3 @@
-#broken
 import copy
 from datasets import load_dataset
 import itertools
@@ -47,10 +46,10 @@ def tokenize_dialogs(dialogs, images, processor):
 
 
 def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
-    dataset_dict = load_dataset("jwaters8978/synthetic_dataset", name="default")
+    dataset_dict = load_dataset("ogarcia2/web_scraper_dataset_2", name="default")
     #dataset_dict = load_dataset("jwaters8978/web_scraper_dataset_2", name="default")
     dataset = dataset_dict['train']
-    dataset = dataset.select(range(100))#testing
+    #dataset = dataset.select(range(100))#testing
     dataset = dataset.train_test_split(test_size=1-split_ratio, shuffle=True, seed=42)[split]
     
     # Convert to list of dictionaries and wrap images in lists
