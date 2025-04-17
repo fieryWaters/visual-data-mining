@@ -30,6 +30,9 @@ class DisplayWidget:
         x = screen_width - window_width - 10
         y = screen_height - window_height - 50
         self.dot_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+
+        # Default Prompt For session
+        self.session_prompt = ""   # will hold whatever the user typed
         
         # Data collector integration
         self.collector = collector
@@ -37,6 +40,7 @@ class DisplayWidget:
         # Track states
         self.is_running = False
         self.is_loading = False
+        self.is_saving_prompt = False 
         
         # Create a canvas to hold the circle (in the dot window)
         self.canvas = tk.Canvas(
@@ -91,6 +95,22 @@ class DisplayWidget:
                         self.master.after(0, self._prompt_for_password)
                         return
                     
+                    # 1) grab the prompt
+                    raw_prompt = self.prompt_widget.get("1.0", "end-1c")
+                    if not raw_prompt.strip():
+                        self.is_loading = False
+                        self.master.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill="red"))
+                        messagebox.showerror("Missing prompt", "Please describe what you’re doing first.")
+                        return
+
+                    self.session_prompt = raw_prompt        # store it
+                    self.prompt_widget.config(state="disabled")  # lock editing
+
+                    self.prompt_widget.config(
+                        bg="#555555",      # lighter grey
+                        fg="#888888",
+                        insertbackground="#888888")
+                    
                     # Start collector in a dedicated thread completely separate from the UI
                     print("Starting data collector in dedicated thread...")
                     
@@ -113,10 +133,30 @@ class DisplayWidget:
                     if self.collector:
                         print("Deactivating data collector...")
                         self.collector.stop()  # This now just deactivates the recorder
+
                     self.is_running = False
                     self.is_loading = False
-                    # Update UI on main thread
-                    self.master.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill="red"))
+                    self.is_saving_prompt = True
+                    self.master.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill="blue"))
+
+                    self._save_prompt_to_log(self.session_prompt)
+
+
+                    def finish_saving():
+                        self.prompt_widget.config(state="normal")
+                        self.prompt_widget.delete("1.0", "end")
+                        self.prompt_widget.config(
+                            bg="#3A3A3A",     # original dark grey
+                            fg="white",
+                            insertbackground="white")
+                        self.is_saving_prompt = False
+                        self.is_running = False
+                        self.is_loading = False
+                        self.canvas.itemconfig(self.circle_id, fill="red")
+                    
+                    self.session_prompt = ""   
+
+                    self.master.after(2000, finish_saving) 
             except Exception as e:
                 print(f"Error toggling collector: {e}")
                 self.is_loading = False
@@ -204,12 +244,25 @@ class DisplayWidget:
             except:
                 pass
 
+    def _save_prompt_to_log(self, prompt_txt):
+        ts = time.strftime("%Y‑%m‑%d %H:%M:%S")
+        with open("session_prompts.log", "a", encoding="utf‑8") as f:
+            f.write(f"{ts}  {prompt_txt}\n")
+
+
 def run_app():
     # Create the main window with a title bar that can be minimized
     root = tk.Tk()
     root.title("Visual Data Mining Control")
-    root.geometry("300x220+100+100")
+    root.geometry("300x280+100+100")
     root.configure(bg="#2C2C2C")
+
+    for idx, weight in ((0,0),   # title row
+                        (1,0),   # status row
+                        (2,0),   # "Describe this session:" label
+                        (3,1),   # text area – can stretch
+                        (4,0)):  # Add‑Password button
+        root.rowconfigure(idx, weight=weight)
     
     # Initialize the display widget with our pre-initialized but inactive collector
     global collector  # Use the collector we started before the UI
@@ -223,6 +276,7 @@ def run_app():
     root.rowconfigure(1, weight=1)
     root.rowconfigure(2, weight=1)
     root.rowconfigure(3, weight=1)
+    root.rowconfigure(4, weight=1)
 
     # App title
     title_label = tk.Label(
@@ -245,16 +299,41 @@ def run_app():
     status_label.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
 
     # Sync button
-    sync_button = tk.Button(
+    # sync_button = tk.Button(
+    #     root,
+    #     text="Sync Data",
+    #     font=("Helvetica", 12, "bold"),
+    #     fg="white",
+    #     bg="#444444",
+    #     relief="flat",
+    #     command=lambda: sync_files(sync_button, app)
+    # )
+    # sync_button.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+
+    # --- Session‑prompt label ---
+    prompt_label = tk.Label(
         root,
-        text="Sync Data",
-        font=("Helvetica", 12, "bold"),
+        text="Describe this session:",
+        font=("Helvetica", 10, "bold"),
         fg="white",
-        bg="#444444",
-        relief="flat",
-        command=lambda: sync_files(sync_button, app)
+        bg="#2C2C2C"
     )
-    sync_button.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+    prompt_label.grid(row=2, column=0, padx=10, pady=(10, 1), sticky="w")
+
+    # --- Text area ---------------------------------------------------
+    prompt_text = tk.Text(
+        root,
+        font=("Helvetica", 10),
+        bg="#3A3A3A",
+        fg="white",
+        insertbackground="white",   # caret visible on dark bg
+        relief="flat",
+        height=4,                   # roughly 4 lines tall
+        wrap="word"                 # wrap at word boundaries
+    )
+    prompt_text.grid(row=3, column=0, padx=10, pady=6, sticky="nsew")
+
+    app.prompt_widget = prompt_text
 
     # Add password button
     add_pwd_button = tk.Button(
@@ -266,7 +345,7 @@ def run_app():
         relief="flat",
         command=lambda: add_password(app)
     )
-    add_pwd_button.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
+    add_pwd_button.grid(row=4, column=0, padx=10, pady=10, sticky="nsew")
 
     # Set the initial state to not running (red)
     app.canvas.itemconfig(app.circle_id, fill="red")
@@ -274,7 +353,9 @@ def run_app():
     # Update status periodically
     def update_status():
         try:
-            if app.is_running:
+            if app.is_saving_prompt:
+                status_label.config(text="Status: Saving Prompt...")
+            elif app.is_running:
                 status_label.config(text="Status: Running")
             elif app.is_loading:
                 status_label.config(text="Status: Loading...")
@@ -343,103 +424,103 @@ def add_password(app):
             messagebox.showerror("Error", f"Failed to add password: {e}")
             print(f"Error adding password: {e}")
 
-def sync_files(button, app=None):
-    """Sync collected data files to remote server"""
-    was_running = False
+# def sync_files(button, app=None):
+#     """Sync collected data files to remote server"""
+#     was_running = False
     
-    # If collection is running and app is provided, stop collection first
-    if app and app.is_running:
-        print("Pausing data collection for sync...")
-        was_running = True
-        # Store original button appearance
-        original_fill = app.canvas.itemcget(app.circle_id, "fill")
+#     # If collection is running and app is provided, stop collection first
+#     if app and app.is_running:
+#         print("Pausing data collection for sync...")
+#         was_running = True
+#         # Store original button appearance
+#         original_fill = app.canvas.itemcget(app.circle_id, "fill")
         
-        # Stop the collector
-        if app.collector:
-            app.collector.stop()
-            app.is_running = False
+#         # Stop the collector
+#         if app.collector:
+#             app.collector.stop()
+#             app.is_running = False
     
-    # Paths based on SimpleCollector's defaults
-    source_dir = os.path.join(os.getcwd(), 'logs')
-    if not os.path.exists(source_dir):
-        print(f"Creating directory: {source_dir}")
-        os.makedirs(source_dir, exist_ok=True)
+#     # Paths based on SimpleCollector's defaults
+#     source_dir = os.path.join(os.getcwd(), 'logs')
+#     if not os.path.exists(source_dir):
+#         print(f"Creating directory: {source_dir}")
+#         os.makedirs(source_dir, exist_ok=True)
         
-    # Define remote destination with username-specific folder
-    # Get current username for personalized upload folder
-    try:
-        username = sp.check_output(['whoami'], text=True).strip()
-        remote_destination = f'data_uploader:/data/uploads/{username}'
-        print(f"Using upload destination: {remote_destination}")
-    except Exception as e:
-        print(f"Error getting username: {e}")
-        # Fallback to generic name if username can't be determined
-        remote_destination = 'data_uploader:/data/uploads/unknown_user'
+#     # Define remote destination with username-specific folder
+#     # Get current username for personalized upload folder
+#     try:
+#         username = sp.check_output(['whoami'], text=True).strip()
+#         remote_destination = f'data_uploader:/data/uploads/{username}'
+#         print(f"Using upload destination: {remote_destination}")
+#     except Exception as e:
+#         print(f"Error getting username: {e}")
+#         # Fallback to generic name if username can't be determined
+#         remote_destination = 'data_uploader:/data/uploads/unknown_user'
     
-    # Update UI to show syncing state
-    button.config(text="Syncing...", state="disabled")
-    if app:
-        app.canvas.itemconfig(app.circle_id, fill="orange")  # Orange during sync
+#     # Update UI to show syncing state
+#     button.config(text="Syncing...", state="disabled")
+#     if app:
+#         app.canvas.itemconfig(app.circle_id, fill="orange")  # Orange during sync
     
-    command = [
-        'rsync',
-        '-avz',
-        '--checksum',
-        '--remove-source-files',
-        '--partial-dir=.rsync-partial',
-        '--compress-level=9',
-        '--timeout=5',
-        source_dir,
-        remote_destination
-    ]
+#     command = [
+#         'rsync',
+#         '-avz',
+#         '--checksum',
+#         '--remove-source-files',
+#         '--partial-dir=.rsync-partial',
+#         '--compress-level=9',
+#         '--timeout=5',
+#         source_dir,
+#         remote_destination
+#     ]
 
-    try:
-        print(f"Running sync command: {' '.join(command)}")
-        process = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+#     try:
+#         print(f"Running sync command: {' '.join(command)}")
+#         process = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
 
-        # Real-time output
-        for line in iter(process.stdout.readline, ''):
-            line = line.strip()
-            if line:
-                print(f"Syncing: {line}")
-                button.config(text=f"{line[:20]}...")
+#         # Real-time output
+#         for line in iter(process.stdout.readline, ''):
+#             line = line.strip()
+#             if line:
+#                 print(f"Syncing: {line}")
+#                 button.config(text=f"{line[:20]}...")
 
-        process.stdout.close()
-        return_code = process.wait()
+#         process.stdout.close()
+#         return_code = process.wait()
 
-        if return_code == 0:
-            button.config(text="Sync Successful")
-            print("Data sync completed successfully")
-        else:
-            stderr_output = process.stderr.read().strip()
-            print(f"Error during sync: {stderr_output}")
-            button.config(text="Sync Failed")
+#         if return_code == 0:
+#             button.config(text="Sync Successful")
+#             print("Data sync completed successfully")
+#         else:
+#             stderr_output = process.stderr.read().strip()
+#             print(f"Error during sync: {stderr_output}")
+#             button.config(text="Sync Failed")
             
-            # Show error in message box if critical
-            if stderr_output and 'error' in stderr_output.lower():
-                messagebox.showerror("Sync Error", f"Failed to sync: {stderr_output[:100]}")
+#             # Show error in message box if critical
+#             if stderr_output and 'error' in stderr_output.lower():
+#                 messagebox.showerror("Sync Error", f"Failed to sync: {stderr_output[:100]}")
 
-    except Exception as e:
-        print(f"Unexpected error during sync: {e}")
-        button.config(text="Error!")
-        messagebox.showerror("Sync Error", f"Failed to sync: {str(e)}")
+#     except Exception as e:
+#         print(f"Unexpected error during sync: {e}")
+#         button.config(text="Error!")
+#         messagebox.showerror("Sync Error", f"Failed to sync: {str(e)}")
 
-    finally:
-        # Reset button after delay
-        button.after(3000, lambda: button.config(text="Sync Data", state="normal"))
+#     finally:
+#         # Reset button after delay
+#         button.after(3000, lambda: button.config(text="Sync Data", state="normal"))
         
-        # Restart collection if it was running before
-        if app and was_running:
-            def restart_collection():
-                # Reset circle to appropriate state based on collection status
-                if app.is_running:
-                    app.canvas.itemconfig(app.circle_id, fill="green")
-                else:
-                    # Need to restart collection
-                    app.toggle_state(None)
+#         # Restart collection if it was running before
+#         if app and was_running:
+#             def restart_collection():
+#                 # Reset circle to appropriate state based on collection status
+#                 if app.is_running:
+#                     app.canvas.itemconfig(app.circle_id, fill="green")
+#                 else:
+#                     # Need to restart collection
+#                     app.toggle_state(None)
                     
-            # Schedule restart after button reset
-            button.after(3500, restart_collection)
+#             # Schedule restart after button reset
+#             button.after(3500, restart_collection)
 
 def run_tkinter_in_thread():
     """Run the Tkinter main loop in its own dedicated thread."""
@@ -448,8 +529,11 @@ def run_tkinter_in_thread():
         # Create and configure the main GUI window with standard decorations
         root = tk.Tk()
         root.title("Visual Data Mining Control")
-        root.geometry("300x220+100+100")
+        root.geometry("300x280+100+100")
         root.configure(bg="#2C2C2C")
+
+        for idx, weight in ((0,0), (1,0), (2,0), (3,1), (4,0)):
+            root.rowconfigure(idx, weight=weight)
         
         # Create the display widget with separate dot indicator
         app = DisplayWidget(root)
@@ -460,6 +544,7 @@ def run_tkinter_in_thread():
         root.rowconfigure(1, weight=1)
         root.rowconfigure(2, weight=1)
         root.rowconfigure(3, weight=1)
+        root.rowconfigure(4, weight=1)
         
         # App title
         title_label = tk.Label(
@@ -482,16 +567,41 @@ def run_tkinter_in_thread():
         status_label.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
         
         # Sync button
-        sync_button = tk.Button(
+        # sync_button = tk.Button(
+        #     root,
+        #     text="Sync Data",
+        #     font=("Helvetica", 12, "bold"),
+        #     fg="white",
+        #     bg="#444444",
+        #     relief="flat",
+        #     command=lambda: sync_files(sync_button, app)
+        # )
+        # sync_button.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+
+        # --- Session‑prompt label ---
+        prompt_label = tk.Label(
             root,
-            text="Sync Data",
-            font=("Helvetica", 12, "bold"),
+            text="Describe this session:",
+            font=("Helvetica", 10, "bold"),
             fg="white",
-            bg="#444444",
-            relief="flat",
-            command=lambda: sync_files(sync_button, app)
+            bg="#2C2C2C"
         )
-        sync_button.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+        prompt_label.grid(row=2, column=0, padx=10, pady=(10, 1), sticky="w")
+
+        # --- Text area ---------------------------------------------------
+        prompt_text = tk.Text(
+            root,
+            font=("Helvetica", 10),
+            bg="#3A3A3A",
+            fg="white",
+            insertbackground="white",   # caret visible on dark bg
+            relief="flat",
+            height=4,                   # roughly 4 lines tall
+            wrap="word"                 # wrap at word boundaries
+        )
+        prompt_text.grid(row=3, column=0, padx=10, pady=6, sticky="nsew")
+
+        app.prompt_widget = prompt_text 
         
         # Add password button
         add_pwd_button = tk.Button(
@@ -503,12 +613,14 @@ def run_tkinter_in_thread():
             relief="flat",
             command=lambda: add_password(app)
         )
-        add_pwd_button.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
+        add_pwd_button.grid(row=4, column=0, padx=10, pady=10, sticky="nsew")
         
         # Update status periodically
         def update_status():
             try:
-                if app.is_running:
+                if app.is_saving_prompt:
+                    status_label.config(text="Status: Saving Prompt...")
+                elif app.is_running:
                     status_label.config(text="Status: Running")
                 elif app.is_loading:
                     status_label.config(text="Status: Loading...")
