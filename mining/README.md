@@ -21,7 +21,7 @@ Executables will be created as `data_collection_GUI.exe` and/or `data_player.exe
 
 ### Linux
 ```bash
-brew install python@3.11
+# insall python3.11 using this link: https://www.python.org/downloads/release/python-3110/
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -59,7 +59,7 @@ python3 data_collection_GUI.py
 python3 run_tests.py
 ```
 
-## Privacy 
+## Privacy
 - All sensitive data is sanitized before storage
 - Passwords are detected and replaced with [REDACTED]
 - Raw keystroke data is never written directly to disk
