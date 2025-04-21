@@ -18,9 +18,7 @@ echo "Starting training job number $JOB_NUM at $(date)"
 echo "Running on node: $(hostname)"
 
 # Set up environment
-source ~/git-repos/visual-data-mining/venv/bin/activate
-
-pip freeze
+source ~/git-repos/visual-data-mining/venv_visual_data_mining/bin/activate
 
 # Set up wandb run ID tracking
 if [ $JOB_NUM -eq 1 ]; then

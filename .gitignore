@@ -1,5 +1,6 @@
+data_player.exe
 training/.ipynb_checkpoints/
-venv*
+*venv*
 training/llama-recipes
 training/__pycache__/
 .ipynb_checkpoints/
@@ -9,3 +10,28 @@ training/wandb/
 finetuned_model/
 data_processing/synthetic_dataset/
 trained_model/
+
+# Mining module
+mining/logs/
+mining/screenshots/
+mining/memory_captures/
+mining/__pycache__/
+mining/mining-venv/
+mining/*_captures/
+mining/*.log
+mining/.venv/
+mining/**/__pycache__/
+mining/utils/__pycache__/
+mining/tests/__pycache__/
+mining/test_output/
+mining/secret.keys
+mining/**/secret.keys
+mining/integration_test/secret.keys
+
+# System files
+.DS_Store
+.vscode/
+*.swp
+*.swo
+*~
+
