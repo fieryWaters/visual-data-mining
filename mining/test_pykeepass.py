@@ -65,7 +65,7 @@ def add_password_entry(kp, title, username, password, url=None, notes=None):
         
         # Save the database
         kp.save()
-        print(f"Added password entry: {title}")
+        print(f"Added entry: {title}")
         return True
     except Exception as e:
         print(f"Error adding password entry: {e}")
@@ -85,7 +85,7 @@ def list_passwords(kp):
         passwords = []
         print("\nPassword entries:")
         for entry in entries:
-            print(f"Title: {entry.title}, Username: {entry.username}, Password: {entry.password}")
+            print(f"Title: {entry.title}, Username: {entry.username}, Password: [REDACTED]")
             passwords.append(entry.password)
         
         return passwords
@@ -109,7 +109,7 @@ def find_entry(kp, title=None, username=None):
         
         print(f"Found {len(entries)} matching entries:")
         for i, entry in enumerate(entries):
-            print(f"{i+1}. Title: {entry.title}, Username: {entry.username}, Password: {entry.password}")
+            print(f"{i+1}. Title: {entry.title}, Username: {entry.username}, Password: [REDACTED]")
         
         return entries
     except Exception as e:
@@ -150,8 +150,8 @@ def main():
     # Database file path
     db_path = "passwords.kdbx"
     
-    # Master password
-    master_password = "master_password"
+    # Master password (using a simple test password)
+    master_password = "test_master_password"
     
     # Check if database exists, create if not
     if not os.path.exists(db_path):
@@ -159,10 +159,10 @@ def main():
         if not kp:
             sys.exit(1)
         
-        # Add some test passwords
-        add_password_entry(kp, "Sample Login", "user1", "password123")
-        add_password_entry(kp, "Email", "user@example.com", "email_password")
-        add_password_entry(kp, "Banking", "bank_user", "secure_bank_password")
+        # Add some test passwords (using generic names for security)
+        add_password_entry(kp, "Sample Login", "user1", "test_password1")
+        add_password_entry(kp, "Email", "user@example.com", "test_password2")
+        add_password_entry(kp, "Banking", "bank_user", "test_password3")
     else:
         # Open existing database
         kp = open_keepass_db(db_path, master_password)
@@ -183,7 +183,7 @@ def main():
     
     # Get just the password strings
     password_strings = get_all_passwords(kp)
-    print(f"\nPassword strings for sanitization: {password_strings}")
+    print(f"\nFound {len(password_strings)} passwords for sanitization")
     
     print("\nTest completed successfully")
 

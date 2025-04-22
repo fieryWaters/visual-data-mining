@@ -198,16 +198,16 @@ if __name__ == "__main__":
         # Load or create passwords
         if not os.path.exists(manager.passwords_file) or not manager.load_passwords():
             print("Adding sample passwords")
-            manager.add_password("mySecretPassword", "Email", "user@example.com")
-            manager.add_password("anotherPassword123", "Banking", "user123")
+            manager.add_password("samplePassword1", "Email", "user@example.com")
+            manager.add_password("samplePassword2", "Banking", "user123")
             
-        # List passwords
+        # Count passwords
         passwords = manager.get_passwords()
-        print(f"Passwords: {passwords}")
+        print(f"Number of stored passwords: {len(passwords)}")
         
         # Test search
         search_term = "secret"
         found = manager.search_password(search_term)
-        print(f"Passwords containing '{search_term}': {found}")
+        print(f"Found {len(found)} passwords containing '{search_term}'")
     else:
         print("Failed to set up encryption")

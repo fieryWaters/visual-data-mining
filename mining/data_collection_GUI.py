@@ -298,6 +298,29 @@ def run_app():
     app.collector = collector  # Connect the pre-initialized collector
     app.is_running = False  # Start in inactive state
     
+    # Initialize KeePass database on startup
+    def initialize_keepass():
+        try:
+            # Check if database file exists
+            if os.path.exists("passwords.kdbx"):
+                # Show an info message
+                messagebox.showinfo(
+                    "Password Database",
+                    "Please unlock the password database to enable all features.",
+                    parent=root
+                )
+                # Try to initialize the database
+                app.keepass_dialog.init_database()
+            else:
+                # Skip KeePass init if there's no database file yet
+                print("No password database found, skipping init.")
+                # We'll create it when user tries to use password features
+        except Exception as e:
+            print(f"Error initializing KeePass: {e}")
+    
+    # Schedule KeePass initialization after UI is fully loaded
+    root.after(500, initialize_keepass)
+    
     # Configure control window layout
     for idx, weight in ((0,0),   # title row
                         (1,0),   # status row
@@ -444,7 +467,7 @@ def add_password(app):
                 passwords = app.keepass_dialog.get_all_passwords()
                 for pwd in passwords:
                     app.collector.add_password(pwd)
-                print(f"Added {len(passwords)} passwords for sanitization")
+                print(f"Added passwords for sanitization")
             return True
         return False
     except Exception as e:
@@ -464,7 +487,7 @@ def view_passwords(app):
             passwords = app.keepass_dialog.get_all_passwords()
             for pwd in passwords:
                 app.collector.add_password(pwd)
-            print(f"Updated collector with {len(passwords)} passwords")
+            print("Updated collector with passwords")
             
     except Exception as e:
         messagebox.showerror("Error", f"Failed to open password viewer: {e}")
@@ -473,39 +496,51 @@ def view_passwords(app):
 def find_sensitive_data(app):
     """Find sensitive data in log files without modifying them"""
     try:
-        # Initialize KeePass database if needed
-        if not app.keepass_dialog.keepass_manager.kp:
-            result = app.keepass_dialog.init_database()
-            if not result:
-                messagebox.showerror(
-                    "Error", 
-                    "Cannot find sensitive data without access to password database", 
-                    parent=app.master
-                )
-                return
-        
         # Create retroactive sanitizer
         sanitizer = RetroactiveSanitizer(app.keepass_dialog.keepass_manager)
         
-        # Find occurrences
-        app.master.config(cursor="watch")  # Show busy cursor
+        # Prompt user for custom search string
+        custom_string = simpledialog.askstring(
+            "Find Sensitive Data",
+            "Enter text to search for (leave empty to use stored passwords):",
+            parent=app.master
+        )
+        
+        # Show busy cursor
+        app.master.config(cursor="watch")
         app.master.update()
         
-        occurrences = sanitizer.find_occurrences()
+        # Find occurrences with optional custom string
+        if custom_string:
+            occurrences = sanitizer.find_occurrences(custom_string)
+        else:
+            # Make sure KeePass is initialized if we're using stored passwords
+            if not app.keepass_dialog.keepass_manager.kp:
+                app.master.config(cursor="")  # Reset cursor
+                messagebox.showinfo(
+                    "Using Stored Passwords",
+                    "Using stored passwords for search. Please provide a custom string or initialize the password database.",
+                    parent=app.master
+                )
+                # Try again with custom string
+                return find_sensitive_data(app)
+            
+            occurrences = sanitizer.find_occurrences()
         
         app.master.config(cursor="")  # Reset cursor
         
         if not occurrences:
             messagebox.showinfo(
                 "Find Result",
-                "No sensitive data found in log files",
+                f"No occurrences of '{custom_string if custom_string else 'stored passwords'}' found in log files",
                 parent=app.master
             )
             return
         
         # Show results
         total_matches = sum(occurrences.values())
-        result_message = f"Found {total_matches} potential password occurrences in {len(occurrences)} files:\n\n"
+        search_term = f"'{custom_string}'" if custom_string else "potential passwords"
+        result_message = f"Found {total_matches} occurrences of {search_term} in {len(occurrences)} files:\n\n"
         
         for file, count in occurrences.items():
             result_message += f"{file}: {count} occurrences\n"
@@ -524,38 +559,50 @@ def find_sensitive_data(app):
 def sanitize_sensitive_data(app):
     """Sanitize sensitive data in log files by replacing with [REDACTED]"""
     try:
-        # Initialize KeePass database if needed
-        if not app.keepass_dialog.keepass_manager.kp:
-            result = app.keepass_dialog.init_database()
-            if not result:
-                messagebox.showerror(
-                    "Error", 
-                    "Cannot sanitize logs without access to password database", 
-                    parent=app.master
-                )
-                return
-        
         # Create retroactive sanitizer
         sanitizer = RetroactiveSanitizer(app.keepass_dialog.keepass_manager)
         
-        # Find occurrences first
-        app.master.config(cursor="watch")  # Show busy cursor
+        # Prompt user for custom search string
+        custom_string = simpledialog.askstring(
+            "Sanitize Logs",
+            "Enter text to search and replace (leave empty to use stored passwords):",
+            parent=app.master
+        )
+        
+        # Show busy cursor
+        app.master.config(cursor="watch")
         app.master.update()
         
-        occurrences = sanitizer.find_occurrences()
+        # Find occurrences with optional custom string
+        if custom_string:
+            occurrences = sanitizer.find_occurrences(custom_string)
+        else:
+            # Make sure KeePass is initialized if we're using stored passwords
+            if not app.keepass_dialog.keepass_manager.kp:
+                app.master.config(cursor="")  # Reset cursor
+                messagebox.showinfo(
+                    "Using Stored Passwords",
+                    "Using stored passwords for sanitization. Please provide a custom string or initialize the password database.",
+                    parent=app.master
+                )
+                # Try again with custom string
+                return sanitize_sensitive_data(app)
+            
+            occurrences = sanitizer.find_occurrences()
         
         if not occurrences:
             app.master.config(cursor="")  # Reset cursor
             messagebox.showinfo(
                 "Sanitize Result",
-                "No sensitive data found in log files",
+                f"No occurrences of '{custom_string if custom_string else 'stored passwords'}' found in log files",
                 parent=app.master
             )
             return
         
         # Show results and ask for confirmation
         total_matches = sum(occurrences.values())
-        confirm_message = f"Found {total_matches} potential password occurrences in {len(occurrences)} files:\n\n"
+        search_term = f"'{custom_string}'" if custom_string else "potential passwords"
+        confirm_message = f"Found {total_matches} occurrences of {search_term} in {len(occurrences)} files:\n\n"
         
         for file, count in occurrences.items():
             confirm_message += f"{file}: {count} occurrences\n"
@@ -572,14 +619,18 @@ def sanitize_sensitive_data(app):
             app.master.config(cursor="")  # Reset cursor
             return
         
-        # Perform sanitization
-        replacements = sanitizer.sanitize_logs()
+        # Perform sanitization with optional custom string
+        if custom_string:
+            replacements = sanitizer.sanitize_logs(custom_string)
+        else:
+            replacements = sanitizer.sanitize_logs()
         
         app.master.config(cursor="")  # Reset cursor
         
         # Show results
         total_replaced = sum(replacements.values())
-        result_message = f"Sanitized {total_replaced} occurrences in {len(replacements)} files"
+        search_term = f"'{custom_string}'" if custom_string else "sensitive data"
+        result_message = f"Sanitized {total_replaced} occurrences of {search_term} in {len(replacements)} files"
         
         messagebox.showinfo(
             "Sanitize Result",

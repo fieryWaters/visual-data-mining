@@ -23,20 +23,28 @@ class RetroactiveSanitizer:
         self.keepass_manager = keepass_manager
         self.logs_dir = logs_dir
         
-    def find_occurrences(self) -> Dict[str, int]:
+    def find_occurrences(self, custom_strings=None) -> Dict[str, int]:
         """
-        Find potential password occurrences in log files without modifying them.
+        Find occurrences of sensitive data in log files without modifying them.
+        
+        Args:
+            custom_strings: Optional list of custom strings to search for instead of passwords
         
         Returns:
             Dict mapping filenames to the number of occurrences found
         """
-        if not self.keepass_manager.kp:
-            return {}
-            
-        # Get passwords to search for
-        passwords = self.keepass_manager.get_passwords()
-        if not passwords:
-            return {}
+        # If custom strings are provided, use those
+        if custom_strings:
+            search_terms = custom_strings if isinstance(custom_strings, list) else [custom_strings]
+        else:
+            # Otherwise use passwords from KeePass
+            if not self.keepass_manager.kp:
+                return {}
+                
+            # Get passwords to search for
+            search_terms = self.keepass_manager.get_passwords()
+            if not search_terms:
+                return {}
             
         # Get all log files
         log_files = self._get_log_files()
@@ -59,7 +67,7 @@ class RetroactiveSanitizer:
                     continue
                     
                 # Find matches
-                matches = FuzzyMatcher.find_matches(text_content, passwords)
+                matches = FuzzyMatcher.find_matches(text_content, search_terms)
                 
                 # Store the count of occurrences
                 if matches:
@@ -71,20 +79,28 @@ class RetroactiveSanitizer:
                 
         return occurrences
     
-    def sanitize_logs(self) -> Dict[str, int]:
+    def sanitize_logs(self, custom_strings=None) -> Dict[str, int]:
         """
-        Sanitize all log files by replacing passwords with [REDACTED].
+        Sanitize all log files by replacing sensitive data with [REDACTED].
+        
+        Args:
+            custom_strings: Optional list of custom strings to search for and sanitize
         
         Returns:
             Dict mapping filenames to the number of replacements made
         """
-        if not self.keepass_manager.kp:
-            return {}
-            
-        # Get passwords to search for
-        passwords = self.keepass_manager.get_passwords()
-        if not passwords:
-            return {}
+        # If custom strings are provided, use those
+        if custom_strings:
+            search_terms = custom_strings if isinstance(custom_strings, list) else [custom_strings]
+        else:
+            # Otherwise use passwords from KeePass
+            if not self.keepass_manager.kp:
+                return {}
+                
+            # Get passwords to search for
+            search_terms = self.keepass_manager.get_passwords()
+            if not search_terms:
+                return {}
             
         # Get all log files
         log_files = self._get_log_files()
@@ -107,7 +123,7 @@ class RetroactiveSanitizer:
                     continue
                     
                 # Find matches
-                matches = FuzzyMatcher.find_matches(text_content, passwords)
+                matches = FuzzyMatcher.find_matches(text_content, search_terms)
                 if not matches:
                     continue
                     

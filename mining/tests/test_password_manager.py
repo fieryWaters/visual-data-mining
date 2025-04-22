@@ -32,28 +32,28 @@ class TestPasswordManager(unittest.TestCase):
     def test_add_password(self):
         """Test adding passwords and duplicate prevention"""
         # Add a password
-        self.manager.add_password("secret123")
+        self.manager.add_password("test_password_1")
         passwords = self.manager.get_passwords()
-        self.assertIn("secret123", passwords, "Added password should be in the list")
+        self.assertIn("test_password_1", passwords, "Added password should be in the list")
         
         # Test duplicate prevention
-        self.manager.add_password("secret123")
-        count = self.manager.get_passwords().count("secret123")
+        self.manager.add_password("test_password_1")
+        count = self.manager.get_passwords().count("test_password_1")
         self.assertEqual(count, 1, "Duplicate passwords should not be added")
     
     def test_remove_password(self):
         """Test removing a password while keeping others"""
         # Add two passwords
-        self.manager.add_password("secret123")
-        self.manager.add_password("secret456")
+        self.manager.add_password("test_password_1")
+        self.manager.add_password("test_password_2")
         
         # Remove one password
-        self.manager.remove_password("secret123")
+        self.manager.remove_password("test_password_1")
         remaining_passwords = self.manager.get_passwords()
         
-        self.assertNotIn("secret123", remaining_passwords, 
+        self.assertNotIn("test_password_1", remaining_passwords, 
                         "Removed password should not be in the list")
-        self.assertIn("secret456", remaining_passwords, 
+        self.assertIn("test_password_2", remaining_passwords, 
                      "Other passwords should remain in the list")
     
     def test_save_load_passwords(self):

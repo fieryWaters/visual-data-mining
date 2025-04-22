@@ -19,17 +19,30 @@ class KeePassDialog:
         self.db_path = db_path
         self.keepass_manager = KeePassManager(db_path)
         
-    def init_database(self):
-        """Initialize the KeePass database, create if needed"""
+    def init_database(self, silent=False):
+        """
+        Initialize the KeePass database, create if needed
+        
+        Args:
+            silent: If True, don't show error messages for cancellations
+            
+        Returns:
+            bool: True if database was successfully initialized
+        """
         if os.path.exists(self.db_path):
             # Database exists, prompt for password
-            return self._prompt_master_password()
+            return self._prompt_master_password(attempts=3, silent=silent)
         else:
             # No database, prompt to create
-            return self._create_new_database()
+            return self._create_new_database(silent=silent)
     
-    def _create_new_database(self):
-        """Create a new KeePass database with master password"""
+    def _create_new_database(self, silent=False):
+        """
+        Create a new KeePass database with master password
+        
+        Args:
+            silent: If True, don't show error messages for cancellations
+        """
         
         # Show a dialog explaining what's happening
         messagebox.showinfo(
@@ -48,7 +61,8 @@ class KeePassDialog:
         )
         
         if not password:
-            messagebox.showinfo("Cancelled", "Database creation cancelled.", parent=self.parent)
+            if not silent:
+                messagebox.showinfo("Cancelled", "Database creation cancelled.", parent=self.parent)
             return False
             
         # Confirm password
@@ -60,7 +74,8 @@ class KeePassDialog:
         )
         
         if password != confirm:
-            messagebox.showerror("Error", "Passwords do not match!", parent=self.parent)
+            if not silent:
+                messagebox.showerror("Error", "Passwords do not match!", parent=self.parent)
             return False
             
         # Create the database
@@ -72,15 +87,22 @@ class KeePassDialog:
             )
             return True
         else:
-            messagebox.showerror(
-                "Error",
-                "Failed to create password database.",
-                parent=self.parent
-            )
+            if not silent:
+                messagebox.showerror(
+                    "Error",
+                    "Failed to create password database.",
+                    parent=self.parent
+                )
             return False
     
-    def _prompt_master_password(self, attempts=3):
-        """Prompt for master password to open existing database"""
+    def _prompt_master_password(self, attempts=3, silent=False):
+        """
+        Prompt for master password to open existing database
+        
+        Args:
+            attempts: Number of password attempts allowed
+            silent: If True, don't show error messages for cancellations
+        """
         
         for i in range(attempts):
             password = simpledialog.askstring(
@@ -101,17 +123,19 @@ class KeePassDialog:
             else:
                 attempts_left = attempts - i - 1
                 if attempts_left > 0:
-                    messagebox.showerror(
-                        "Error",
-                        f"Incorrect password. {attempts_left} attempts remaining.",
-                        parent=self.parent
-                    )
+                    if not silent:
+                        messagebox.showerror(
+                            "Error",
+                            f"Incorrect password. {attempts_left} attempts remaining.",
+                            parent=self.parent
+                        )
                 else:
-                    messagebox.showerror(
-                        "Error",
-                        "Failed to unlock database after multiple attempts.",
-                        parent=self.parent
-                    )
+                    if not silent:
+                        messagebox.showerror(
+                            "Error",
+                            "Failed to unlock database after multiple attempts.",
+                            parent=self.parent
+                        )
         return False
     
     def add_password(self):

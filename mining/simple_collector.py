@@ -41,7 +41,7 @@ class SimpleCollector:
         """Add a password to sanitize"""
         self.keystroke_sanitizer.add_password(password)
         self.keystroke_sanitizer.save_passwords()
-        print(f"Added password: {password}")
+        print("Added password to sanitization list")
     
     def _process_buffer(self):
         """Process keystroke buffer and save screenshots every 5 seconds"""
@@ -175,8 +175,8 @@ if __name__ == "__main__":
     collector = SimpleCollector(password)
     
     # Add test passwords
-    collector.add_password("secret123")
-    collector.add_password("password123")
+    collector.add_password("test_password1")
+    collector.add_password("test_password2")
     
     # Start collection
     collector.start()
