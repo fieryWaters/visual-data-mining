@@ -79,11 +79,6 @@ class PasswordViewer:
             button_frame,
             text="Add Password",
             font=("Helvetica", 12, "bold"),
-            fg="white",
-            bg="#1E1E1E",  # Darker background for better contrast
-            activebackground="#333333",  # Darker when pressed
-            activeforeground="white",
-            relief="raised",  # Changed to raised for visibility
             command=self.add_password
         )
         add_button.pack(side="left", padx=5, pady=5, fill="x", expand=True)
@@ -92,11 +87,6 @@ class PasswordViewer:
             button_frame,
             text="Close",
             font=("Helvetica", 12, "bold"),
-            fg="white",
-            bg="#1E1E1E",  # Darker background for better contrast
-            activebackground="#333333",  # Darker when pressed
-            activeforeground="white",
-            relief="raised",  # Changed to raised for visibility
             command=self.dialog.destroy
         )
         close_button.pack(side="left", padx=5, pady=5, fill="x", expand=True)
@@ -242,11 +232,6 @@ class PasswordViewer:
                 entry_frame,
                 text="X",
                 font=("Helvetica", 8, "bold"),
-                fg="white",
-                bg="#AA3333",
-                activebackground="#CC4444",  # Lighter red when pressed
-                activeforeground="white",
-                relief="raised",  # Changed to raised for visibility
                 width=2,
                 command=lambda e=entry, ef=entry_frame: self.delete_password(e, ef)
             )
