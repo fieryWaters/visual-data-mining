@@ -9,6 +9,8 @@ import time
 
 from simple_collector import SimpleCollector
 from pykeepass_gui import KeePassDialog
+from password_viewer import PasswordViewer
+from retroactive_sanitizer import RetroactiveSanitizer
 
 class DisplayWidget:
     def __init__(self, master, collector=None):
@@ -282,7 +284,7 @@ def run_app():
     # Create the main window with a title bar that can be minimized
     root = tk.Tk()
     root.title("Visual Data Mining Control")
-    root.geometry("300x320+100+100")
+    root.geometry("300x400+100+100")
     root.configure(bg="#2C2C2C")
 
     for idx, weight in ((0,0),   # title row
@@ -300,12 +302,13 @@ def run_app():
     
     # Configure grid layout for main window
     root.columnconfigure(0, weight=1)
-    root.rowconfigure(0, weight=1)
-    root.rowconfigure(1, weight=1)
-    root.rowconfigure(2, weight=1)
-    root.rowconfigure(3, weight=1)
-    root.rowconfigure(4, weight=1)
-    root.rowconfigure(5, weight=1)
+    root.rowconfigure(0, weight=1)  # Title
+    root.rowconfigure(1, weight=1)  # Status
+    root.rowconfigure(2, weight=1)  # Prompt label
+    root.rowconfigure(3, weight=1)  # Text area
+    root.rowconfigure(4, weight=1)  # Manage Passwords button
+    root.rowconfigure(5, weight=1)  # Find Sensitive Data button
+    root.rowconfigure(6, weight=1)  # Sanitize Logs button
 
     # App title
     title_label = tk.Label(
@@ -364,29 +367,41 @@ def run_app():
 
     app.prompt_widget = prompt_text
 
-    # Add password button
-    add_pwd_button = tk.Button(
+    # Manage Passwords button
+    manage_pwd_button = tk.Button(
         root,
-        text="Add Password",
+        text="Manage Passwords",
         font=("Helvetica", 12, "bold"),
         fg="white",
         bg="#444444",
         relief="flat",
-        command=lambda: add_password(app)
+        command=lambda: view_passwords(app)
     )
-    add_pwd_button.grid(row=4, column=0, padx=(10, 5), pady=10, sticky="nsew")
+    manage_pwd_button.grid(row=4, column=0, padx=10, pady=(10, 5), sticky="nsew")
     
-    # Search password button
-    search_pwd_button = tk.Button(
+    # Find Sensitive Data button (find only)
+    find_button = tk.Button(
         root,
-        text="Search Password",
+        text="Find Sensitive Data",
         font=("Helvetica", 12, "bold"),
         fg="white",
         bg="#444444",
         relief="flat",
-        command=lambda: search_password(app)
+        command=lambda: find_sensitive_data(app)
     )
-    search_pwd_button.grid(row=5, column=0, padx=10, pady=(0, 10), sticky="nsew")
+    find_button.grid(row=5, column=0, padx=10, pady=5, sticky="nsew")
+    
+    # Sanitize Logs button (find and replace)
+    sanitize_button = tk.Button(
+        root,
+        text="Sanitize Logs",
+        font=("Helvetica", 12, "bold"),
+        fg="white",
+        bg="#444444",
+        relief="flat",
+        command=lambda: sanitize_sensitive_data(app)
+    )
+    sanitize_button.grid(row=6, column=0, padx=10, pady=(5, 10), sticky="nsew")
 
     # Set the initial state to not running (red)
     app.canvas.itemconfig(app.circle_id, fill="red")
@@ -463,39 +478,145 @@ def add_password(app):
         print(f"Error adding password: {e}")
         return False
 
-def search_password(app):
-    """Search for passwords in the keystroke logs"""
+def view_passwords(app):
+    """Show the password viewer dialog"""
     try:
-        # Use the KeePass dialog to search for a password
-        found_passwords = app.keepass_dialog.search_for_password()
+        # Create a password viewer with the app's KeePass manager
+        viewer = PasswordViewer(app.master, app.keepass_dialog.keepass_manager)
+        viewer.show_dialog()
         
-        if not found_passwords:
-            messagebox.showinfo("Search Result", "No matching passwords found", parent=app.master)
-            return
-            
-        # Show the found passwords
-        result_message = f"Found {len(found_passwords)} matching passwords:\n\n"
-        for i, pwd in enumerate(found_passwords):
-            result_message += f"{i+1}. {pwd}\n"
-            
-        messagebox.showinfo("Search Result", result_message, parent=app.master)
-        
-        # Offer to add these to sanitization if collector is running
-        if app.collector is not None and messagebox.askyesno(
-            "Add to Sanitization",
-            "Would you like to add these passwords to sanitization?",
-            parent=app.master
-        ):
-            for pwd in found_passwords:
+        # If collection is active, update with any new passwords
+        if app.collector is not None:
+            passwords = app.keepass_dialog.get_all_passwords()
+            for pwd in passwords:
                 app.collector.add_password(pwd)
+            print(f"Updated collector with {len(passwords)} passwords")
+            
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to open password viewer: {e}")
+        print(f"Error opening password viewer: {e}")
+
+def find_sensitive_data(app):
+    """Find sensitive data in log files without modifying them"""
+    try:
+        # Initialize KeePass database if needed
+        if not app.keepass_dialog.keepass_manager.kp:
+            result = app.keepass_dialog.init_database()
+            if not result:
+                messagebox.showerror(
+                    "Error", 
+                    "Cannot find sensitive data without access to password database", 
+                    parent=app.master
+                )
+                return
+        
+        # Create retroactive sanitizer
+        sanitizer = RetroactiveSanitizer(app.keepass_dialog.keepass_manager)
+        
+        # Find occurrences
+        app.master.config(cursor="watch")  # Show busy cursor
+        app.master.update()
+        
+        occurrences = sanitizer.find_occurrences()
+        
+        app.master.config(cursor="")  # Reset cursor
+        
+        if not occurrences:
             messagebox.showinfo(
-                "Success", 
-                f"Added {len(found_passwords)} passwords to sanitization",
+                "Find Result",
+                "No sensitive data found in log files",
                 parent=app.master
             )
+            return
+        
+        # Show results
+        total_matches = sum(occurrences.values())
+        result_message = f"Found {total_matches} potential password occurrences in {len(occurrences)} files:\n\n"
+        
+        for file, count in occurrences.items():
+            result_message += f"{file}: {count} occurrences\n"
+        
+        messagebox.showinfo(
+            "Find Result",
+            result_message,
+            parent=app.master
+        )
+        
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to search for passwords: {e}")
-        print(f"Error searching passwords: {e}")
+        app.master.config(cursor="")  # Reset cursor if error
+        messagebox.showerror("Error", f"Failed to find sensitive data: {e}")
+        print(f"Error finding sensitive data: {e}")
+
+def sanitize_sensitive_data(app):
+    """Sanitize sensitive data in log files by replacing with [REDACTED]"""
+    try:
+        # Initialize KeePass database if needed
+        if not app.keepass_dialog.keepass_manager.kp:
+            result = app.keepass_dialog.init_database()
+            if not result:
+                messagebox.showerror(
+                    "Error", 
+                    "Cannot sanitize logs without access to password database", 
+                    parent=app.master
+                )
+                return
+        
+        # Create retroactive sanitizer
+        sanitizer = RetroactiveSanitizer(app.keepass_dialog.keepass_manager)
+        
+        # Find occurrences first
+        app.master.config(cursor="watch")  # Show busy cursor
+        app.master.update()
+        
+        occurrences = sanitizer.find_occurrences()
+        
+        if not occurrences:
+            app.master.config(cursor="")  # Reset cursor
+            messagebox.showinfo(
+                "Sanitize Result",
+                "No sensitive data found in log files",
+                parent=app.master
+            )
+            return
+        
+        # Show results and ask for confirmation
+        total_matches = sum(occurrences.values())
+        confirm_message = f"Found {total_matches} potential password occurrences in {len(occurrences)} files:\n\n"
+        
+        for file, count in occurrences.items():
+            confirm_message += f"{file}: {count} occurrences\n"
+            
+        confirm_message += "\nDo you want to sanitize these files?"
+        
+        confirm = messagebox.askyesno(
+            "Confirm Sanitization",
+            confirm_message,
+            parent=app.master
+        )
+        
+        if not confirm:
+            app.master.config(cursor="")  # Reset cursor
+            return
+        
+        # Perform sanitization
+        replacements = sanitizer.sanitize_logs()
+        
+        app.master.config(cursor="")  # Reset cursor
+        
+        # Show results
+        total_replaced = sum(replacements.values())
+        result_message = f"Sanitized {total_replaced} occurrences in {len(replacements)} files"
+        
+        messagebox.showinfo(
+            "Sanitize Result",
+            result_message,
+            parent=app.master
+        )
+        
+    except Exception as e:
+        app.master.config(cursor="")  # Reset cursor if error
+        messagebox.showerror("Error", f"Failed to sanitize logs: {e}")
+        print(f"Error sanitizing logs: {e}")
 
 # def sync_files(button, app=None):
 #     """Sync collected data files to remote server"""
@@ -602,10 +723,10 @@ def run_tkinter_in_thread():
         # Create and configure the main GUI window with standard decorations
         root = tk.Tk()
         root.title("Visual Data Mining Control")
-        root.geometry("300x320+100+100")
+        root.geometry("300x400+100+100")
         root.configure(bg="#2C2C2C")
 
-        for idx, weight in ((0,0), (1,0), (2,0), (3,1), (4,0), (5,0)):
+        for idx, weight in ((0,0), (1,0), (2,0), (3,1), (4,0), (5,0), (6,0)):
             root.rowconfigure(idx, weight=weight)
         
         # Create the display widget with separate dot indicator
