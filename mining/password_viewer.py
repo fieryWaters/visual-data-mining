@@ -39,6 +39,7 @@ class PasswordViewer:
         self.dialog.transient(self.parent)
         self.dialog.grab_set()
         
+        
         # Ensure database is open before proceeding
         if not self.keepass_manager.kp:
             # Initialize the database with a password prompt
@@ -79,8 +80,10 @@ class PasswordViewer:
             text="Add Password",
             font=("Helvetica", 12, "bold"),
             fg="white",
-            bg="#444444",
-            relief="flat",
+            bg="#1E1E1E",  # Darker background for better contrast
+            activebackground="#333333",  # Darker when pressed
+            activeforeground="white",
+            relief="raised",  # Changed to raised for visibility
             command=self.add_password
         )
         add_button.pack(side="left", padx=5, pady=5, fill="x", expand=True)
@@ -90,8 +93,10 @@ class PasswordViewer:
             text="Close",
             font=("Helvetica", 12, "bold"),
             fg="white",
-            bg="#444444",
-            relief="flat",
+            bg="#1E1E1E",  # Darker background for better contrast
+            activebackground="#333333",  # Darker when pressed
+            activeforeground="white",
+            relief="raised",  # Changed to raised for visibility
             command=self.dialog.destroy
         )
         close_button.pack(side="left", padx=5, pady=5, fill="x", expand=True)
@@ -224,9 +229,10 @@ class PasswordViewer:
                 entry_frame,
                 variable=show_var,
                 bg="#333333",
-                activebackground="#333333",
+                activebackground="#444444",
                 fg="white",
-                selectcolor="#444444",
+                selectcolor="#222222",  # Darker color when selected for better contrast
+                highlightthickness=0,   # Remove highlight border
                 command=lambda e=entry, pl=password_label, sv=show_var, eid=entry_id: self.toggle_password(e, pl, sv, eid)
             )
             show_checkbox.pack(side="left", padx=5, pady=5)
@@ -238,7 +244,9 @@ class PasswordViewer:
                 font=("Helvetica", 8, "bold"),
                 fg="white",
                 bg="#AA3333",
-                relief="flat",
+                activebackground="#CC4444",  # Lighter red when pressed
+                activeforeground="white",
+                relief="raised",  # Changed to raised for visibility
                 width=2,
                 command=lambda e=entry, ef=entry_frame: self.delete_password(e, ef)
             )

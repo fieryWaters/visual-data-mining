@@ -21,8 +21,8 @@ Executables will be created as `data_collection_GUI.exe` and/or `data_player.exe
 
 ### Linux
 ```bash
-# insall python3.11 using this link: https://www.python.org/downloads/release/python-3110/
-python3.11 -m venv .venv
+# insall python3.12 using this link: https://www.python.org/downloads/release/python-3120/
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 

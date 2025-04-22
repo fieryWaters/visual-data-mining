@@ -14,25 +14,28 @@ from retroactive_sanitizer import RetroactiveSanitizer
 
 class DisplayWidget:
     def __init__(self, master, collector=None):
+        # The master window is now the dot indicator window
         self.master = master
-        self.master.title("Data Collection Control")
+        self.master.title("Indicator")
+        self.master.overrideredirect(True)
+        self.master.attributes('-topmost', True)
         
-        # Create a separate top-level window for the dot indicator
-        self.dot_window = tk.Toplevel(master)
-        self.dot_window.title("Indicator")
-        self.dot_window.overrideredirect(True)
-        self.dot_window.attributes('-topmost', True)
+        # Dark background color
+        self.master.configure(bg="#2C2C2C")
         
-        # Dark background color for the dot window
-        self.dot_window.configure(bg="#2C2C2C")
-        
-        # Position the dot window at bottom-right corner
-        screen_width = self.dot_window.winfo_screenwidth()
-        screen_height = self.dot_window.winfo_screenheight()
+        # Position at bottom-right corner
+        screen_width = self.master.winfo_screenwidth()
+        screen_height = self.master.winfo_screenheight()
         window_width, window_height = 50, 50
         x = screen_width - window_width - 10
         y = screen_height - window_height - 50
-        self.dot_window.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        self.master.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        
+        # Create a separate control window that is a child of the dot indicator
+        self.control_window = tk.Toplevel(master)
+        self.control_window.title("Data Collection Control")
+        self.control_window.configure(bg="#2C2C2C")
+        self.control_window.geometry("300x400+100+100")
 
         # Default Prompt For session
         self.session_prompt = ""   # will hold whatever the user typed
@@ -48,9 +51,9 @@ class DisplayWidget:
         self.is_loading = False
         self.is_saving_prompt = False 
         
-        # Create a canvas to hold the circle (in the dot window)
+        # Create a canvas to hold the circle (in the master window, which is the dot indicator)
         self.canvas = tk.Canvas(
-            self.dot_window, 
+            self.master, 
             width=40, 
             height=40, 
             highlightthickness=0, 
@@ -66,11 +69,12 @@ class DisplayWidget:
         self.canvas.bind("<Button-1>", self.toggle_state)
         
         # Make the dot window draggable (since it has no border)
-        self.dot_window.bind("<ButtonPress-1>", self.start_move)
-        self.dot_window.bind("<B1-Motion>", self.do_move)
+        self.master.bind("<ButtonPress-1>", self.start_move)
+        self.master.bind("<B1-Motion>", self.do_move)
         
-        # Connect the windows - closing main window will close dot window
+        # Connect the windows - closing dot window will close control window
         self.master.protocol("WM_DELETE_WINDOW", self.on_master_close)
+        self.control_window.protocol("WM_DELETE_WINDOW", self.on_master_close)
 
     def toggle_state(self, event=None):
         """
@@ -249,12 +253,12 @@ class DisplayWidget:
         """Reposition the dot window based on mouse movement."""
         dx = event.x - self._x
         dy = event.y - self._y
-        x0 = self.dot_window.winfo_x() + dx
-        y0 = self.dot_window.winfo_y() + dy
-        self.dot_window.geometry(f"+{x0}+{y0}")
+        x0 = self.master.winfo_x() + dx
+        y0 = self.master.winfo_y() + dy
+        self.master.geometry(f"+{x0}+{y0}")
         
     def on_master_close(self):
-        """Handle main window closing - ensure both windows close."""
+        """Handle window closing - ensure both windows close."""
         try:
             # Stop data collection if running
             if self.collector and self.is_running:
@@ -263,13 +267,13 @@ class DisplayWidget:
             if self.collector:
                 self.collector.shutdown()
             # Destroy both windows
-            self.dot_window.destroy()
+            self.control_window.destroy()
             self.master.destroy()
         except Exception as e:
             print(f"Error during shutdown: {e}")
             # Force destroy if there's an error
             try:
-                self.dot_window.destroy()
+                self.control_window.destroy()
                 self.master.destroy()
             except:
                 pass
@@ -281,38 +285,35 @@ class DisplayWidget:
 
 
 def run_app():
-    # Create the main window with a title bar that can be minimized
+    # Create the small dot indicator as the main window
     root = tk.Tk()
-    root.title("Visual Data Mining Control")
-    root.geometry("300x400+100+100")
+    root.overrideredirect(True)
+    root.attributes('-topmost', True)
     root.configure(bg="#2C2C2C")
-
-    for idx, weight in ((0,0),   # title row
-                        (1,0),   # status row
-                        (2,0),   # "Describe this session:" label
-                        (3,1),   # text area – can stretch
-                        (4,0)):  # Add‑Password button
-        root.rowconfigure(idx, weight=weight)
+    root.geometry("50x50+0+0")  # Position will be adjusted by DisplayWidget
     
-    # Initialize the display widget with our pre-initialized but inactive collector
+    # Initialize our display widget which will create the control window
     global collector  # Use the collector we started before the UI
     app = DisplayWidget(root)
     app.collector = collector  # Connect the pre-initialized collector
     app.is_running = False  # Start in inactive state
     
-    # Configure grid layout for main window
-    root.columnconfigure(0, weight=1)
-    root.rowconfigure(0, weight=1)  # Title
-    root.rowconfigure(1, weight=1)  # Status
-    root.rowconfigure(2, weight=1)  # Prompt label
-    root.rowconfigure(3, weight=1)  # Text area
-    root.rowconfigure(4, weight=1)  # Manage Passwords button
-    root.rowconfigure(5, weight=1)  # Find Sensitive Data button
-    root.rowconfigure(6, weight=1)  # Sanitize Logs button
+    # Configure control window layout
+    for idx, weight in ((0,0),   # title row
+                        (1,0),   # status row
+                        (2,0),   # "Describe this session:" label
+                        (3,1),   # text area – can stretch
+                        (4,0),   # Manage Passwords button
+                        (5,0),   # Find Sensitive Data button
+                        (6,0)):  # Sanitize Logs button
+        app.control_window.rowconfigure(idx, weight=weight)
+    
+    # Configure grid layout for control window
+    app.control_window.columnconfigure(0, weight=1)
 
     # App title
     title_label = tk.Label(
-        root,
+        app.control_window,
         text="Visual Data Mining",
         font=("Helvetica", 14, "bold"),
         fg="white",
@@ -322,7 +323,7 @@ def run_app():
 
     # Status label
     status_label = tk.Label(
-        root,
+        app.control_window,
         text="Status: Not Running",  # Start with inactive status
         font=("Helvetica", 10),
         fg="white",
@@ -344,7 +345,7 @@ def run_app():
 
     # --- Session‑prompt label ---
     prompt_label = tk.Label(
-        root,
+        app.control_window,
         text="Describe this session:",
         font=("Helvetica", 10, "bold"),
         fg="white",
@@ -354,7 +355,7 @@ def run_app():
 
     # --- Text area ---------------------------------------------------
     prompt_text = tk.Text(
-        root,
+        app.control_window,
         font=("Helvetica", 10),
         bg="#3A3A3A",
         fg="white",
@@ -369,36 +370,27 @@ def run_app():
 
     # Manage Passwords button
     manage_pwd_button = tk.Button(
-        root,
+        app.control_window,
         text="Manage Passwords",
         font=("Helvetica", 12, "bold"),
-        fg="white",
-        bg="#444444",
-        relief="flat",
         command=lambda: view_passwords(app)
     )
     manage_pwd_button.grid(row=4, column=0, padx=10, pady=(10, 5), sticky="nsew")
     
     # Find Sensitive Data button (find only)
     find_button = tk.Button(
-        root,
+        app.control_window,
         text="Find Sensitive Data",
         font=("Helvetica", 12, "bold"),
-        fg="white",
-        bg="#444444",
-        relief="flat",
         command=lambda: find_sensitive_data(app)
     )
     find_button.grid(row=5, column=0, padx=10, pady=5, sticky="nsew")
     
     # Sanitize Logs button (find and replace)
     sanitize_button = tk.Button(
-        root,
+        app.control_window,
         text="Sanitize Logs",
         font=("Helvetica", 12, "bold"),
-        fg="white",
-        bg="#444444",
-        relief="flat",
         command=lambda: sanitize_sensitive_data(app)
     )
     sanitize_button.grid(row=6, column=0, padx=10, pady=(5, 10), sticky="nsew")
@@ -424,25 +416,7 @@ def run_app():
         except Exception as e:
             print(f"Error updating status: {e}")
     
-    # Set up additional window close handler for the main window
-    # (DisplayWidget already has a handler for the root window)
-    def on_dot_close():
-        try:
-            print("Dot window closed, shutting down application...")
-            if app.collector:
-                print("Performing full shutdown of data collectors...")
-                if app.is_running:
-                    # Stop recording first if it's running
-                    app.collector.stop()
-                # Then do a full shutdown of listeners
-                app.collector.shutdown()
-            root.destroy()
-        except Exception as e:
-            print(f"Error during shutdown: {e}")
-            root.destroy()
-    
-    # Set close handler for the dot window
-    app.dot_window.protocol("WM_DELETE_WINDOW", on_dot_close)
+    # The DisplayWidget class now handles window closing via on_master_close
     
     # Initial status update and start event loop
     update_status()
@@ -720,29 +694,24 @@ def run_tkinter_in_thread():
     """Run the Tkinter main loop in its own dedicated thread."""
     try:
         print("Starting Tkinter in dedicated thread...")
-        # Create and configure the main GUI window with standard decorations
+        # Create the small dot indicator as the main window
         root = tk.Tk()
-        root.title("Visual Data Mining Control")
-        root.geometry("300x400+100+100")
+        root.overrideredirect(True)
+        root.attributes('-topmost', True)
         root.configure(bg="#2C2C2C")
+        root.geometry("50x50+0+0")  # Position will be adjusted by DisplayWidget
 
-        for idx, weight in ((0,0), (1,0), (2,0), (3,1), (4,0), (5,0), (6,0)):
-            root.rowconfigure(idx, weight=weight)
-        
-        # Create the display widget with separate dot indicator
+        # Create the display widget which will create the control window
         app = DisplayWidget(root)
         
-        # Configure grid layout for main window
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=1)
-        root.rowconfigure(1, weight=1)
-        root.rowconfigure(2, weight=1)
-        root.rowconfigure(3, weight=1)
-        root.rowconfigure(4, weight=1)
+        # Configure grid layout for control window
+        app.control_window.columnconfigure(0, weight=1)
+        for idx, weight in ((0,0), (1,0), (2,0), (3,1), (4,0), (5,0), (6,0)):
+            app.control_window.rowconfigure(idx, weight=weight)
         
         # App title
         title_label = tk.Label(
-            root,
+            app.control_window,
             text="Visual Data Mining",
             font=("Helvetica", 14, "bold"),
             fg="white",
@@ -752,7 +721,7 @@ def run_tkinter_in_thread():
         
         # Status label
         status_label = tk.Label(
-            root,
+            app.control_window,
             text="Status: Not Running",
             font=("Helvetica", 10),
             fg="white",
@@ -774,7 +743,7 @@ def run_tkinter_in_thread():
 
         # --- Session‑prompt label ---
         prompt_label = tk.Label(
-            root,
+            app.control_window,
             text="Describe this session:",
             font=("Helvetica", 10, "bold"),
             fg="white",
@@ -784,7 +753,7 @@ def run_tkinter_in_thread():
 
         # --- Text area ---------------------------------------------------
         prompt_text = tk.Text(
-            root,
+            app.control_window,
             font=("Helvetica", 10),
             bg="#3A3A3A",
             fg="white",
@@ -799,12 +768,9 @@ def run_tkinter_in_thread():
         
         # Add password button
         add_pwd_button = tk.Button(
-            root,
+            app.control_window,
             text="Add Password",
             font=("Helvetica", 12, "bold"),
-            fg="white",
-            bg="#444444",
-            relief="flat",
             command=lambda: add_password(app)
         )
         add_pwd_button.grid(row=4, column=0, padx=10, pady=10, sticky="nsew")
@@ -827,19 +793,7 @@ def run_tkinter_in_thread():
             except Exception as e:
                 print(f"Error updating status: {e}")
         
-        # Set up additional window close handler for the dot window
-        def on_dot_close():
-            try:
-                print("Dot window closed, shutting down application...")
-                if app.collector and app.is_running:
-                    app.collector.stop()
-                root.destroy()
-            except Exception as e:
-                print(f"Error during shutdown: {e}")
-                root.destroy()
-        
-        # Set handlers for window closing
-        app.dot_window.protocol("WM_DELETE_WINDOW", on_dot_close)
+        # The DisplayWidget class handles window closing via on_master_close
         
         # Initial status update
         update_status()

@@ -30,6 +30,7 @@ class KeePassDialog:
     
     def _create_new_database(self):
         """Create a new KeePass database with master password"""
+        
         # Show a dialog explaining what's happening
         messagebox.showinfo(
             "Create Password Database",
@@ -80,6 +81,7 @@ class KeePassDialog:
     
     def _prompt_master_password(self, attempts=3):
         """Prompt for master password to open existing database"""
+        
         for i in range(attempts):
             password = simpledialog.askstring(
                 "Master Password",
