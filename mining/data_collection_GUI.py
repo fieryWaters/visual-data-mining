@@ -8,6 +8,7 @@ import threading
 import time
 
 from simple_collector import SimpleCollector
+from pykeepass_gui import KeePassDialog
 
 class DisplayWidget:
     def __init__(self, master, collector=None):
@@ -36,6 +37,9 @@ class DisplayWidget:
         
         # Data collector integration
         self.collector = collector
+        
+        # PyKeePass integration
+        self.keepass_dialog = KeePassDialog(master)
         
         # Track states
         self.is_running = False
@@ -180,20 +184,44 @@ class DisplayWidget:
     def _prompt_for_password(self):
         """Prompt for password on the main thread and initialize collector"""
         try:
-            # Use main window as parent for the dialog, not the dot window
-            password = simpledialog.askstring("Password", 
-                                            "Enter encryption password:", 
-                                            show='*',
-                                            parent=self.master)  # Main control window
+            # Initialize KeePass database first
+            keepass_initialized = self.keepass_dialog.init_database()
             
-            if not password:
-                self.canvas.itemconfig(self.circle_id, fill="red")
-                self.is_loading = False
-                print("Password entry cancelled")
-                return
+            if not keepass_initialized:
+                # User may have cancelled, but we can still proceed with simple password
+                password = simpledialog.askstring("Password", 
+                                                "Enter encryption password:", 
+                                                show='*',
+                                                parent=self.master)  # Main control window
+                
+                if not password:
+                    self.canvas.itemconfig(self.circle_id, fill="red")
+                    self.is_loading = False
+                    print("Password entry cancelled")
+                    return
+            else:
+                # Use master password from KeePass as encryption password
+                # This is a convenience so users only need to remember one password
+                password = simpledialog.askstring("Confirm", 
+                                                "Re-enter your master password for data encryption:", 
+                                                show='*',
+                                                parent=self.master)
+                
+                if not password:
+                    self.canvas.itemconfig(self.circle_id, fill="red")
+                    self.is_loading = False
+                    print("Password confirmation cancelled")
+                    return
 
             print("Initializing collector with password...")
             self.collector = SimpleCollector(password)
+            
+            # If KeePass is initialized, add all passwords to sanitization
+            if keepass_initialized:
+                passwords = self.keepass_dialog.get_all_passwords()
+                for pwd in passwords:
+                    self.collector.add_password(pwd)
+                print(f"Added {len(passwords)} passwords for sanitization")
             
             # Now toggle again to start the collection
             self.toggle_state(None)
@@ -254,7 +282,7 @@ def run_app():
     # Create the main window with a title bar that can be minimized
     root = tk.Tk()
     root.title("Visual Data Mining Control")
-    root.geometry("300x280+100+100")
+    root.geometry("300x320+100+100")
     root.configure(bg="#2C2C2C")
 
     for idx, weight in ((0,0),   # title row
@@ -277,6 +305,7 @@ def run_app():
     root.rowconfigure(2, weight=1)
     root.rowconfigure(3, weight=1)
     root.rowconfigure(4, weight=1)
+    root.rowconfigure(5, weight=1)
 
     # App title
     title_label = tk.Label(
@@ -345,7 +374,19 @@ def run_app():
         relief="flat",
         command=lambda: add_password(app)
     )
-    add_pwd_button.grid(row=4, column=0, padx=10, pady=10, sticky="nsew")
+    add_pwd_button.grid(row=4, column=0, padx=(10, 5), pady=10, sticky="nsew")
+    
+    # Search password button
+    search_pwd_button = tk.Button(
+        root,
+        text="Search Password",
+        font=("Helvetica", 12, "bold"),
+        fg="white",
+        bg="#444444",
+        relief="flat",
+        command=lambda: search_password(app)
+    )
+    search_pwd_button.grid(row=5, column=0, padx=10, pady=(0, 10), sticky="nsew")
 
     # Set the initial state to not running (red)
     app.canvas.itemconfig(app.circle_id, fill="red")
@@ -405,24 +446,56 @@ def run_app():
                 pass
 
 def add_password(app):
-    """Add a password to the collector for sanitization"""
-    if app.collector is None:
-        messagebox.showerror("Error", "Data collector not initialized. Start collection first.")
-        return
+    """Add a password to sanitization using PyKeePass"""
+    try:
+        # Use the KeePass dialog to add a password
+        if app.keepass_dialog.add_password():
+            # If a collector is active, also add all passwords from KeePass to it
+            if app.collector is not None:
+                passwords = app.keepass_dialog.get_all_passwords()
+                for pwd in passwords:
+                    app.collector.add_password(pwd)
+                print(f"Added {len(passwords)} passwords for sanitization")
+            return True
+        return False
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to add password: {e}")
+        print(f"Error adding password: {e}")
+        return False
 
-    # Use the main window as parent for the dialog
-    password = simpledialog.askstring("Add Password", 
-                                     "Enter password to sanitize:", 
-                                     show='*',
-                                     parent=app.master)  # master is the main control window
-    if password:
-        try:
-            app.collector.add_password(password)
-            messagebox.showinfo("Success", "Password added successfully")
-            print(f"Added password for sanitization (length: {len(password)})")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to add password: {e}")
-            print(f"Error adding password: {e}")
+def search_password(app):
+    """Search for passwords in the keystroke logs"""
+    try:
+        # Use the KeePass dialog to search for a password
+        found_passwords = app.keepass_dialog.search_for_password()
+        
+        if not found_passwords:
+            messagebox.showinfo("Search Result", "No matching passwords found", parent=app.master)
+            return
+            
+        # Show the found passwords
+        result_message = f"Found {len(found_passwords)} matching passwords:\n\n"
+        for i, pwd in enumerate(found_passwords):
+            result_message += f"{i+1}. {pwd}\n"
+            
+        messagebox.showinfo("Search Result", result_message, parent=app.master)
+        
+        # Offer to add these to sanitization if collector is running
+        if app.collector is not None and messagebox.askyesno(
+            "Add to Sanitization",
+            "Would you like to add these passwords to sanitization?",
+            parent=app.master
+        ):
+            for pwd in found_passwords:
+                app.collector.add_password(pwd)
+            messagebox.showinfo(
+                "Success", 
+                f"Added {len(found_passwords)} passwords to sanitization",
+                parent=app.master
+            )
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to search for passwords: {e}")
+        print(f"Error searching passwords: {e}")
 
 # def sync_files(button, app=None):
 #     """Sync collected data files to remote server"""
@@ -529,10 +602,10 @@ def run_tkinter_in_thread():
         # Create and configure the main GUI window with standard decorations
         root = tk.Tk()
         root.title("Visual Data Mining Control")
-        root.geometry("300x280+100+100")
+        root.geometry("300x320+100+100")
         root.configure(bg="#2C2C2C")
 
-        for idx, weight in ((0,0), (1,0), (2,0), (3,1), (4,0)):
+        for idx, weight in ((0,0), (1,0), (2,0), (3,1), (4,0), (5,0)):
             root.rowconfigure(idx, weight=weight)
         
         # Create the display widget with separate dot indicator
