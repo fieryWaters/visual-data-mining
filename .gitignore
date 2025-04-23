@@ -27,6 +27,8 @@ mining/test_output/
 mining/secret.keys
 mining/**/secret.keys
 mining/integration_test/secret.keys
+mining/passwords.kdbx
+mining/**/passwords.kdbx
 
 # System files
 .DS_Store

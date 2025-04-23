@@ -19,8 +19,8 @@ class SimpleCollector:
         # Create directories
         os.makedirs(output_dir, exist_ok=True)
         
-        # Initialize components
-        self.passwords_file = os.path.join(output_dir, 'secret.keys')
+        # Initialize components - use passwords.kdbx from the parent directory
+        self.passwords_file = 'passwords.kdbx'  # Store in root directory, not in logs
         self.keystroke_recorder = KeystrokeRecorder(buffer_size=1000)
         self.keystroke_sanitizer = KeystrokeSanitizer(passwords_file=self.passwords_file)
         self.screen_recorder = InMemoryScreenRecorder(max_frames=300)

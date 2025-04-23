@@ -201,6 +201,107 @@ class KeePassDialog:
             return []
             
         return self.keepass_manager.get_passwords()
+        
+    def retroactive_sanitize(self, custom_strings=None):
+        """Perform retroactive sanitization with optional custom strings"""
+        from retroactive_sanitizer import RetroactiveSanitizer
+        
+        # Make sure database is initialized
+        if not self.keepass_manager.kp:
+            result = self.init_database()
+            if not result:
+                return False
+        
+        # Create sanitizer
+        sanitizer = RetroactiveSanitizer(self.keepass_manager)
+        
+        # If custom strings provided, use them, otherwise use all passwords
+        strings_to_sanitize = custom_strings if custom_strings else None
+        
+        # Find occurrences
+        occurrences = sanitizer.find_occurrences(strings_to_sanitize)
+        
+        if not occurrences:
+            messagebox.showinfo(
+                "No Matches", 
+                "No password occurrences found in log files.",
+                parent=self.parent
+            )
+            return False
+            
+        # Show found occurrences and ask for confirmation
+        files_text = "\n".join([f"• {file}: {count} occurrences" for file, count in list(occurrences.items())[:10]])
+        if len(occurrences) > 10:
+            files_text += f"\n• ... and {len(occurrences) - 10} more files"
+            
+        confirm = messagebox.askyesno(
+            "Confirm Sanitization",
+            f"Found {sum(occurrences.values())} potential password occurrences in {len(occurrences)} files:\n\n{files_text}\n\n"
+            "Do you want to sanitize these files?",
+            parent=self.parent
+        )
+        
+        if not confirm:
+            return False
+        
+        # Perform sanitization
+        replacements = sanitizer.sanitize_logs(strings_to_sanitize)
+        
+        if replacements:
+            messagebox.showinfo(
+                "Sanitization Complete",
+                f"Sanitized {sum(replacements.values())} occurrences in {len(replacements)} files.",
+                parent=self.parent
+            )
+            return True
+        else:
+            messagebox.showinfo(
+                "No Changes",
+                "No changes were made to log files.",
+                parent=self.parent
+            )
+            return False
+            
+    def retroactive_sanitize_with_search(self):
+        """Search for passwords and retroactively sanitize them"""
+        # Prompt for search term
+        search_term = simpledialog.askstring(
+            "Search for Sanitization", 
+            "Enter text to search for in passwords:", 
+            parent=self.parent
+        )
+        
+        if not search_term:
+            return False
+        
+        # Search for matching passwords
+        matching_passwords = self.keepass_manager.search_password(search_term)
+        
+        if not matching_passwords:
+            messagebox.showinfo(
+                "No Matches", 
+                f"No passwords found containing '{search_term}'.",
+                parent=self.parent
+            )
+            return False
+            
+        # Show found passwords and ask for confirmation
+        passwords_text = "\n".join([f"• {pw}" for pw in matching_passwords[:5]])
+        if len(matching_passwords) > 5:
+            passwords_text += f"\n• ... and {len(matching_passwords) - 5} more"
+            
+        confirm = messagebox.askyesno(
+            "Confirm Search",
+            f"Found {len(matching_passwords)} password(s) containing '{search_term}':\n\n{passwords_text}\n\n"
+            "Do you want to search logs for these passwords?",
+            parent=self.parent
+        )
+        
+        if not confirm:
+            return False
+            
+        # Perform retroactive sanitization with these passwords
+        return self.retroactive_sanitize(matching_passwords)
 
 
 # For testing independently

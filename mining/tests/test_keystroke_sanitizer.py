@@ -34,13 +34,13 @@ class TestKeystrokeSanitizer(unittest.TestCase):
     
     def tearDown(self):
         """Clean up test password files"""
-        for file in self.test_dir.glob("*.keys"):
+        for file in self.test_dir.glob("*.kdbx"):
             if file.exists():
                 os.remove(file)
     
     def create_sanitizer(self, passwords):
         """Create a sanitizer with specified passwords"""
-        file_path = self.test_dir / "test_passwords.keys"
+        file_path = self.test_dir / "test_passwords.kdbx"
         if file_path.exists():
             os.remove(file_path)
             

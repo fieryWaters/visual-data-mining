@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Tuple, Any
 
-from utils.password_manager import PasswordManager
+from utils.keepass_manager import KeePassManager
 from utils.text_buffer import TextBuffer
 from utils.fuzzy_matcher import FuzzyMatcher
 
@@ -19,14 +19,14 @@ class KeystrokeSanitizer:
     Sanitizes keystroke data by detecting and removing sensitive information.
     """
     
-    def __init__(self, passwords_file="secret.keys"):
+    def __init__(self, passwords_file="passwords.kdbx"):
         """Initialize with password file path"""
-        self.password_manager = PasswordManager(passwords_file)
+        self.password_manager = KeePassManager(passwords_file)
     
     # Direct password manager access methods
-    def setup_encryption(self, password=None):
+    def setup_encryption(self, password=None, keyfile=None):
         """Setup encryption with the provided password"""
-        return self.password_manager.setup_encryption(password)
+        return self.password_manager.setup_encryption(password, keyfile)
     
     def load_passwords(self):
         """Load passwords from encrypted file"""
@@ -36,13 +36,13 @@ class KeystrokeSanitizer:
         """Save passwords to encrypted file"""
         return self.password_manager.save_passwords()
     
-    def add_password(self, password):
+    def add_password(self, password, title=None, username=None):
         """Add a password to the list"""
-        self.password_manager.add_password(password)
+        return self.password_manager.add_password(password, title, username)
     
     def remove_password(self, password):
         """Remove a password from the list"""
-        self.password_manager.remove_password(password)
+        return self.password_manager.remove_password(password)
         
     def _sanitize_text(self, text: str, password_locations: List[Tuple[int, int]]) -> str:
         """
@@ -282,23 +282,25 @@ class KeystrokeSanitizer:
 if __name__ == "__main__":
     import time
     import sys
+    import getpass
     from keystroke_recorder import KeystrokeRecorder
     
-    # Initialize sanitizer and add test password
+    # Initialize sanitizer
     sanitizer = KeystrokeSanitizer()
     try:
-        sanitizer.setup_encryption()
-        sanitizer.add_password("secret123")
-        sanitizer.save_passwords()
-        print("Encryption set up successfully with 'secret123' password added")
+        print("Setting up KeePass database...")
+        password = getpass.getpass("Enter master password for KeePass database: ")
+        sanitizer.setup_encryption(password)
+        sanitizer.load_passwords()
+        print("KeePass database set up successfully")
     except Exception as e:
-        print(f"Error setting up encryption: {e}")
+        print(f"Error setting up KeePass database: {e}")
         sys.exit(1)
     
     # Initialize the keystroke recorder
     recorder = KeystrokeRecorder()
     
-    print("Recording keystrokes... Type 'secret123' somewhere in your input.")
+    print("Recording keystrokes... Type sensitive information to test sanitization.")
     print("Press Ctrl+C to stop recording and process the results.")
     
     try:
