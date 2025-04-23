@@ -287,8 +287,8 @@ class KeystrokeSanitizer:
                 
             return True
             
-        except Exception as e:
-            print(f"Error saving sanitized JSON: {e}")
+        except Exception:
+            print("Error saving sanitized JSON")
             return False
     
     # Retroactive sanitization capabilities (moved from RetroactiveSanitizer)

@@ -330,7 +330,7 @@ class PasswordViewer:
         except Exception as e:
             messagebox.showerror(
                 "Error",
-                f"Failed to add password: {e}",
+                "Failed to add password",
                 parent=self.dialog
             )
 
