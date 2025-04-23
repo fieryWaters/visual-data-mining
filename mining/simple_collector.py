@@ -11,6 +11,7 @@ from datetime import datetime
 from keystroke_recorder import KeystrokeRecorder
 from keystroke_sanitizer import KeystrokeSanitizer
 from screen_recorder import InMemoryScreenRecorder
+from utils.keepass_manager import KeePassManager
 
 class SimpleCollector:
     """Minimalist implementation of the data collection system"""
@@ -19,18 +20,13 @@ class SimpleCollector:
         # Create directories
         os.makedirs(output_dir, exist_ok=True)
         
-        # Initialize components - use passwords.kdbx from the parent directory
-        self.passwords_file = 'passwords.kdbx'  # Store in root directory, not in logs
+        # Initialize components with shared password manager
         self.keystroke_recorder = KeystrokeRecorder(buffer_size=1000)
-        self.keystroke_sanitizer = KeystrokeSanitizer(passwords_file=self.passwords_file)
+        self.keystroke_sanitizer = KeystrokeSanitizer(password)
         self.screen_recorder = InMemoryScreenRecorder(max_frames=300)
         
         # Initialize file paths
         self.output_dir = output_dir
-        
-        # Set up password encryption
-        self.keystroke_sanitizer.setup_encryption(password)
-        self.keystroke_sanitizer.load_passwords()
         
         # Internal state
         self.running = False
@@ -39,9 +35,11 @@ class SimpleCollector:
     
     def add_password(self, password):
         """Add a password to sanitize"""
-        self.keystroke_sanitizer.add_password(password)
-        self.keystroke_sanitizer.save_passwords()
-        print("Added password to sanitization list")
+        result = self.keystroke_sanitizer.add_password(password)
+        if result:
+            self.keystroke_sanitizer.save_passwords()
+            print("Added password to sanitization list")
+        return result
     
     def _process_buffer(self):
         """Process keystroke buffer and save screenshots every 5 seconds"""

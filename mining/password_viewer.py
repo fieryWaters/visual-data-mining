@@ -16,11 +16,11 @@ class PasswordViewer:
         """Initialize with parent window and optional KeePass manager"""
         self.parent = parent
         
-        # Use provided manager or create a new one
+        # Use provided manager or get singleton instance
         if keepass_manager:
             self.keepass_manager = keepass_manager
         else:
-            self.keepass_manager = KeePassManager(db_path)
+            self.keepass_manager = KeePassManager.get_instance(db_path)
             
         # Password entries
         self.password_entries = []
@@ -41,7 +41,7 @@ class PasswordViewer:
         
         
         # Ensure database is open before proceeding
-        if not self.keepass_manager.kp:
+        if not self.keepass_manager.is_initialized:
             # Initialize the database with a password prompt
             master_password = simpledialog.askstring(
                 "Master Password",
@@ -108,7 +108,7 @@ class PasswordViewer:
         self.showing_passwords = {}
         
         # Get passwords from the database
-        password_entries = self.keepass_manager.kp.entries if self.keepass_manager.kp else []
+        password_entries = self.keepass_manager.kp.entries if hasattr(self.keepass_manager, 'kp') and self.keepass_manager.kp else []
         
         if not password_entries:
             label = tk.Label(
@@ -274,7 +274,11 @@ class PasswordViewer:
                 entry_frame.destroy()
                 
                 # Check if we need to update the UI
-                if not self.keepass_manager.kp.entries:
+                entries = []
+                if hasattr(self.keepass_manager, 'kp') and self.keepass_manager.kp:
+                    entries = self.keepass_manager.kp.entries
+                    
+                if not entries:
                     self.load_passwords()  # Reload to show "No passwords" message
                     
                 messagebox.showinfo(

@@ -6,8 +6,9 @@ with PASSWORD_FOUND events in the output stream.
 
 import os
 import json
+import glob
 from datetime import datetime
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 
 from utils.keepass_manager import KeePassManager
 from utils.text_buffer import TextBuffer
@@ -17,30 +18,42 @@ from utils.fuzzy_matcher import FuzzyMatcher
 class KeystrokeSanitizer:
     """
     Sanitizes keystroke data by detecting and removing sensitive information.
+    Includes both real-time and retroactive sanitization capabilities.
     """
     
-    def __init__(self, passwords_file="passwords.kdbx"):
-        """Initialize with password file path"""
-        self.password_manager = KeePassManager(passwords_file)
+    def __init__(self, password=None, keyfile=None, logs_dir="logs/sanitized_json"):
+        """Initialize the sanitizer with optional password for immediate setup"""
+        self.logs_dir = logs_dir
+        self.password_manager = KeePassManager.get_instance()
+        
+        # Initialize password manager if credentials provided
+        if password:
+            self.setup_encryption(password, keyfile)
     
-    # Direct password manager access methods
-    def setup_encryption(self, password=None, keyfile=None):
+    def setup_encryption(self, password=None, keyfile=None) -> bool:
         """Setup encryption with the provided password"""
-        return self.password_manager.setup_encryption(password, keyfile)
+        result = self.password_manager.setup_encryption(password, keyfile)
+        if result:
+            self.password_manager.load_passwords()
+        return result
     
-    def load_passwords(self):
+    def is_initialized(self) -> bool:
+        """Check if the password manager is properly initialized"""
+        return self.password_manager.is_initialized
+    
+    def load_passwords(self) -> bool:
         """Load passwords from encrypted file"""
         return self.password_manager.load_passwords()
     
-    def save_passwords(self):
+    def save_passwords(self) -> bool:
         """Save passwords to encrypted file"""
         return self.password_manager.save_passwords()
     
-    def add_password(self, password, title=None, username=None):
+    def add_password(self, password, title=None, username=None) -> bool:
         """Add a password to the list"""
         return self.password_manager.add_password(password, title, username)
     
-    def remove_password(self, password):
+    def remove_password(self, password) -> bool:
         """Remove a password from the list"""
         return self.password_manager.remove_password(password)
         
@@ -276,6 +289,188 @@ class KeystrokeSanitizer:
             
         except Exception as e:
             print(f"Error saving sanitized JSON: {e}")
+            return False
+    
+    # Retroactive sanitization capabilities (moved from RetroactiveSanitizer)
+    def find_occurrences(self, custom_strings=None, logs_dir=None) -> Dict[str, int]:
+        """
+        Find occurrences of sensitive data in log files without modifying them.
+        
+        Args:
+            custom_strings: Optional list of custom strings to search for
+            logs_dir: Optional override for logs directory
+            
+        Returns:
+            Dict mapping filenames to the number of occurrences found
+        """
+        search_dir = logs_dir or self.logs_dir
+        
+        # Get all log files
+        log_files = self._get_log_files(search_dir)
+        if not log_files:
+            return {}
+            
+        # Track occurrences per file
+        occurrences = {}
+        
+        # Add custom strings temporarily if provided
+        original_passwords = []
+        if custom_strings:
+            # Store original passwords
+            original_passwords = self.password_manager.get_passwords()
+            # Add custom strings as temporary passwords
+            strings_to_add = [custom_strings] if isinstance(custom_strings, str) else custom_strings
+            for string in strings_to_add:
+                self.password_manager.add_password(string, f"Temp: {string[:10]}")
+        
+        # Process each file
+        for file_path in log_files:
+            try:
+                # Load the events from the log file
+                events = self._extract_events_from_log(file_path)
+                if not events:
+                    continue
+                
+                # Process events to find sensitive data
+                sanitized_data = self.process_events(events)
+                
+                # Check if any passwords were found
+                if sanitized_data["password_locations"]:
+                    filename = os.path.basename(file_path)
+                    occurrences[filename] = len(sanitized_data["password_locations"])
+            
+            except Exception as e:
+                print(f"Error processing file {file_path}: {e}")
+        
+        # Restore original passwords if we added custom strings
+        if custom_strings and original_passwords:
+            # Remove all passwords (including our temporary ones)
+            for pwd in self.password_manager.get_passwords():
+                self.password_manager.remove_password(pwd)
+            # Add back original passwords
+            for pwd in original_passwords:
+                self.password_manager.add_password(pwd)
+                
+        return occurrences
+    
+    def sanitize_logs(self, custom_strings=None, logs_dir=None) -> Dict[str, int]:
+        """
+        Sanitize all log files by replacing sensitive data with [REDACTED].
+        
+        Args:
+            custom_strings: Optional custom strings to search for and sanitize
+            logs_dir: Optional override for logs directory
+            
+        Returns:
+            Dict mapping filenames to the number of replacements made
+        """
+        search_dir = logs_dir or self.logs_dir
+        
+        # Get all log files
+        log_files = self._get_log_files(search_dir)
+        if not log_files:
+            return {}
+            
+        # Track replacements per file
+        replacements = {}
+        
+        # Add custom strings temporarily if provided
+        original_passwords = []
+        if custom_strings:
+            # Store original passwords
+            original_passwords = self.password_manager.get_passwords()
+            # Add custom strings as temporary passwords
+            strings_to_add = [custom_strings] if isinstance(custom_strings, str) else custom_strings
+            for string in strings_to_add:
+                self.password_manager.add_password(string, f"Temp: {string[:10]}")
+        
+        # Process each file
+        for file_path in log_files:
+            try:
+                # Load the events from the log file
+                events = self._extract_events_from_log(file_path)
+                if not events:
+                    continue
+                
+                # Process events
+                sanitized_data = self.process_events(events)
+                
+                # Check if any passwords were found
+                if sanitized_data["password_locations"]:
+                    # Update the file with sanitized data
+                    self._save_sanitized_data(file_path, sanitized_data)
+                    
+                    # Store the count of replacements
+                    filename = os.path.basename(file_path)
+                    replacements[filename] = len(sanitized_data["password_locations"])
+            
+            except Exception as e:
+                print(f"Error sanitizing file {file_path}: {e}")
+        
+        # Restore original passwords if we added custom strings
+        if custom_strings and original_passwords:
+            # Remove all passwords (including our temporary ones)
+            for pwd in self.password_manager.get_passwords():
+                self.password_manager.remove_password(pwd)
+            # Add back original passwords
+            for pwd in original_passwords:
+                self.password_manager.add_password(pwd)
+                
+        return replacements
+    
+    def _get_log_files(self, logs_dir) -> List[str]:
+        """Get all keystroke log files in the specified logs directory"""
+        if not os.path.exists(logs_dir):
+            return []
+            
+        # Search for all JSON files
+        return glob.glob(os.path.join(logs_dir, "*.json"))
+    
+    def _extract_events_from_log(self, file_path: str) -> List[Dict[str, Any]]:
+        """Extract keystroke events from a log file"""
+        try:
+            with open(file_path, 'r') as f:
+                log_data = json.load(f)
+                
+            # Most log files have events in an 'events' field
+            if 'events' in log_data:
+                return log_data['events']
+            
+            return []
+            
+        except Exception as e:
+            print(f"Error extracting events from {file_path}: {e}")
+            return []
+    
+    def _save_sanitized_data(self, file_path: str, sanitized_data: Dict[str, Any]) -> bool:
+        """Save sanitized data back to the file"""
+        try:
+            # Create output data format
+            output_data = {
+                "metadata": {
+                    "timestamp": datetime.now().isoformat(),
+                    "type": "sanitized_keystroke_data",
+                    "version": "1.0",
+                    "contains_sensitive_data": len(sanitized_data["password_locations"]) > 0,
+                    "sanitization_applied": True,
+                    "retroactive_sanitization": True
+                },
+                "events": sanitized_data["events"],
+                "text_summary": {
+                    "original_length": len(sanitized_data["text"]),
+                    "sanitized_length": len(sanitized_data["sanitized_text"]),
+                    "password_locations_count": len(sanitized_data["password_locations"])
+                }
+            }
+            
+            # Write back to the file
+            with open(file_path, 'w') as f:
+                json.dump(output_data, f, indent=2)
+                
+            return True
+            
+        except Exception as e:
+            print(f"Error saving sanitized data to {file_path}: {e}")
             return False
 
 

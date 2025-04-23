@@ -17,7 +17,7 @@ class KeePassDialog:
         """Initialize with parent window and database path"""
         self.parent = parent
         self.db_path = db_path
-        self.keepass_manager = KeePassManager(db_path)
+        self.keepass_manager = KeePassManager.get_instance(db_path)
         
     def init_database(self, silent=False):
         """
@@ -141,7 +141,7 @@ class KeePassDialog:
     def add_password(self):
         """Add a new password to the database"""
         # Make sure database is initialized
-        if not self.keepass_manager.kp:
+        if not self.keepass_manager.is_initialized:
             result = self.init_database()
             if not result:
                 return False
@@ -176,7 +176,7 @@ class KeePassDialog:
     def search_for_password(self):
         """Search for a password in the database"""
         # Make sure database is initialized
-        if not self.keepass_manager.kp:
+        if not self.keepass_manager.is_initialized:
             result = self.init_database()
             if not result:
                 return []
@@ -197,23 +197,23 @@ class KeePassDialog:
     def get_all_passwords(self):
         """Get all passwords for sanitization"""
         # Make sure database is initialized
-        if not self.keepass_manager.kp:
+        if not self.keepass_manager.is_initialized:
             return []
             
         return self.keepass_manager.get_passwords()
         
     def retroactive_sanitize(self, custom_strings=None):
         """Perform retroactive sanitization with optional custom strings"""
-        from retroactive_sanitizer import RetroactiveSanitizer
+        from keystroke_sanitizer import KeystrokeSanitizer
         
         # Make sure database is initialized
-        if not self.keepass_manager.kp:
+        if not self.keepass_manager.is_initialized:
             result = self.init_database()
             if not result:
                 return False
         
-        # Create sanitizer
-        sanitizer = RetroactiveSanitizer(self.keepass_manager)
+        # Create sanitizer that uses our KeePass manager
+        sanitizer = KeystrokeSanitizer()
         
         # If custom strings provided, use them, otherwise use all passwords
         strings_to_sanitize = custom_strings if custom_strings else None

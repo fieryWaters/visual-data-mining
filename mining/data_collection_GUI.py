@@ -10,7 +10,7 @@ import time
 from simple_collector import SimpleCollector
 from pykeepass_gui import KeePassDialog
 from password_viewer import PasswordViewer
-from retroactive_sanitizer import RetroactiveSanitizer
+from keystroke_sanitizer import KeystrokeSanitizer
 
 class DisplayWidget:
     def __init__(self, master, collector=None):
@@ -496,9 +496,31 @@ def view_passwords(app):
 def find_sensitive_data(app):
     """Find sensitive data in log files without modifying them"""
     try:
-        # Create retroactive sanitizer
-        sanitizer = RetroactiveSanitizer(app.keepass_dialog.keepass_manager)
-        
+        # Get or create sanitizer
+        if app.collector and app.collector.keystroke_sanitizer.is_initialized():
+            sanitizer = app.collector.keystroke_sanitizer
+        else:
+            # If not initialized yet, we need to set up encryption first
+            if not app.keepass_dialog.init_database():
+                messagebox.showerror(
+                    "Error",
+                    "Password database must be initialized first.",
+                    parent=app.master
+                )
+                return
+                
+            # Create a temporary sanitizer with the initialized KeePass manager
+            password = simpledialog.askstring(
+                "Master Password",
+                "Enter master password for database:",
+                show='*',
+                parent=app.master
+            )
+            if not password:
+                return
+                
+            sanitizer = KeystrokeSanitizer(password)
+            
         # Prompt user for custom search string
         custom_string = simpledialog.askstring(
             "Find Sensitive Data",
@@ -511,21 +533,7 @@ def find_sensitive_data(app):
         app.master.update()
         
         # Find occurrences with optional custom string
-        if custom_string:
-            occurrences = sanitizer.find_occurrences(custom_string)
-        else:
-            # Make sure KeePass is initialized if we're using stored passwords
-            if not app.keepass_dialog.keepass_manager.kp:
-                app.master.config(cursor="")  # Reset cursor
-                messagebox.showinfo(
-                    "Using Stored Passwords",
-                    "Using stored passwords for search. Please provide a custom string or initialize the password database.",
-                    parent=app.master
-                )
-                # Try again with custom string
-                return find_sensitive_data(app)
-            
-            occurrences = sanitizer.find_occurrences()
+        occurrences = sanitizer.find_occurrences(custom_string)
         
         app.master.config(cursor="")  # Reset cursor
         
@@ -559,9 +567,31 @@ def find_sensitive_data(app):
 def sanitize_sensitive_data(app):
     """Sanitize sensitive data in log files by replacing with [REDACTED]"""
     try:
-        # Create retroactive sanitizer
-        sanitizer = RetroactiveSanitizer(app.keepass_dialog.keepass_manager)
-        
+        # Get or create sanitizer
+        if app.collector and app.collector.keystroke_sanitizer.is_initialized():
+            sanitizer = app.collector.keystroke_sanitizer
+        else:
+            # If not initialized yet, we need to set up encryption first
+            if not app.keepass_dialog.init_database():
+                messagebox.showerror(
+                    "Error",
+                    "Password database must be initialized first.",
+                    parent=app.master
+                )
+                return
+                
+            # Create a temporary sanitizer with the initialized KeePass manager
+            password = simpledialog.askstring(
+                "Master Password",
+                "Enter master password for database:",
+                show='*',
+                parent=app.master
+            )
+            if not password:
+                return
+                
+            sanitizer = KeystrokeSanitizer(password)
+            
         # Prompt user for custom search string
         custom_string = simpledialog.askstring(
             "Sanitize Logs",
@@ -574,21 +604,7 @@ def sanitize_sensitive_data(app):
         app.master.update()
         
         # Find occurrences with optional custom string
-        if custom_string:
-            occurrences = sanitizer.find_occurrences(custom_string)
-        else:
-            # Make sure KeePass is initialized if we're using stored passwords
-            if not app.keepass_dialog.keepass_manager.kp:
-                app.master.config(cursor="")  # Reset cursor
-                messagebox.showinfo(
-                    "Using Stored Passwords",
-                    "Using stored passwords for sanitization. Please provide a custom string or initialize the password database.",
-                    parent=app.master
-                )
-                # Try again with custom string
-                return sanitize_sensitive_data(app)
-            
-            occurrences = sanitizer.find_occurrences()
+        occurrences = sanitizer.find_occurrences(custom_string)
         
         if not occurrences:
             app.master.config(cursor="")  # Reset cursor
@@ -620,10 +636,7 @@ def sanitize_sensitive_data(app):
             return
         
         # Perform sanitization with optional custom string
-        if custom_string:
-            replacements = sanitizer.sanitize_logs(custom_string)
-        else:
-            replacements = sanitizer.sanitize_logs()
+        replacements = sanitizer.sanitize_logs(custom_string)
         
         app.master.config(cursor="")  # Reset cursor
         
