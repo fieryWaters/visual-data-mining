@@ -99,9 +99,7 @@ class DisplayWidget:
         def toggle_collector():
             try:
                 if not self.is_running:
-                    # Check if we have a collector, create one if not
                     if self.collector is None:
-                        # Make sure to run dialog on main thread
                         self.master.after(0, self._prompt_for_password)
                         return
                     
@@ -176,29 +174,23 @@ class DisplayWidget:
         threading.Thread(target=toggle_collector, daemon=True).start()
         
     def _start_collector_in_thread(self):
-        """Run the collector.start() method in a completely isolated thread"""
         try:
             print("Collector thread starting with process ID:", os.getpid())
-            # This runs in its own dedicated thread, isolated from the UI thread
             self.collector.start()
             print("Collector thread completed initialization")
         except Exception as e:
             print(f"Error in collector thread: {e}")
-            # Signal back to the UI thread that we had an error
             self.master.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill="red"))
     
     def _prompt_for_password(self):
-        """Prompt for password on the main thread and initialize collector"""
         try:
-            # Initialize KeePass database first
             keepass_initialized = self.keepass_dialog.init_database()
             
             if not keepass_initialized:
-                # User may have cancelled, but we can still proceed with simple password
                 password = simpledialog.askstring("Password", 
                                                 "Enter encryption password:", 
                                                 show='*',
-                                                parent=self.master)  # Main control window
+                                                parent=self.master)
                 
                 if not password:
                     self.canvas.itemconfig(self.circle_id, fill="red")
@@ -206,8 +198,6 @@ class DisplayWidget:
                     print("Password entry cancelled")
                     return
             else:
-                # Use master password from KeePass as encryption password
-                # This is a convenience so users only need to remember one password
                 password = simpledialog.askstring("Confirm", 
                                                 "Re-enter your master password for data encryption:", 
                                                 show='*',
@@ -222,14 +212,25 @@ class DisplayWidget:
             print("Initializing collector with password...")
             self.collector = SimpleCollector(password)
             
-            # If KeePass is initialized, add all passwords to sanitization
+            # Initialize with delays to avoid race conditions
+            time.sleep(1)  # Initial delay
+            
+            # Start keystroke recorder with delay
+            self.collector.keystroke_recorder.start()
+            print("Keyboard listener initializing...")
+            time.sleep(1)  # Wait before starting next component
+            
+            # Start screen recorder with delay
+            self.collector.screen_recorder.start() 
+            print("Screen recorder initializing...")
+            time.sleep(1)  # Final delay
+            
             if keepass_initialized:
                 passwords = self.keepass_dialog.get_all_passwords()
                 for pwd in passwords:
                     self.collector.add_password(pwd)
                 print(f"Added {len(passwords)} passwords for sanitization")
             
-            # Now toggle again to start the collection
             self.toggle_state(None)
         except Exception as e:
             print(f"Error in password prompt: {e}")
@@ -292,11 +293,10 @@ def run_app():
     root.configure(bg="#2C2C2C")
     root.geometry("50x50+0+0")  # Position will be adjusted by DisplayWidget
     
-    # Initialize our display widget which will create the control window
-    global collector  # Use the collector we started before the UI
+    global collector
     app = DisplayWidget(root)
-    app.collector = collector  # Connect the pre-initialized collector
-    app.is_running = False  # Start in inactive state
+    app.collector = collector
+    app.is_running = False
     
     # Initialize KeePass database on startup
     def initialize_keepass():
@@ -656,103 +656,6 @@ def sanitize_sensitive_data(app):
         messagebox.showerror("Error", f"Failed to sanitize logs: {e}")
         print(f"Error sanitizing logs: {e}")
 
-# def sync_files(button, app=None):
-#     """Sync collected data files to remote server"""
-#     was_running = False
-    
-#     # If collection is running and app is provided, stop collection first
-#     if app and app.is_running:
-#         print("Pausing data collection for sync...")
-#         was_running = True
-#         # Store original button appearance
-#         original_fill = app.canvas.itemcget(app.circle_id, "fill")
-        
-#         # Stop the collector
-#         if app.collector:
-#             app.collector.stop()
-#             app.is_running = False
-    
-#     # Paths based on SimpleCollector's defaults
-#     source_dir = os.path.join(os.getcwd(), 'logs')
-#     if not os.path.exists(source_dir):
-#         print(f"Creating directory: {source_dir}")
-#         os.makedirs(source_dir, exist_ok=True)
-        
-#     # Define remote destination with username-specific folder
-#     # Get current username for personalized upload folder
-#     try:
-#         username = sp.check_output(['whoami'], text=True).strip()
-#         remote_destination = f'data_uploader:/data/uploads/{username}'
-#         print(f"Using upload destination: {remote_destination}")
-#     except Exception as e:
-#         print(f"Error getting username: {e}")
-#         # Fallback to generic name if username can't be determined
-#         remote_destination = 'data_uploader:/data/uploads/unknown_user'
-    
-#     # Update UI to show syncing state
-#     button.config(text="Syncing...", state="disabled")
-#     if app:
-#         app.canvas.itemconfig(app.circle_id, fill="orange")  # Orange during sync
-    
-#     command = [
-#         'rsync',
-#         '-avz',
-#         '--checksum',
-#         '--remove-source-files',
-#         '--partial-dir=.rsync-partial',
-#         '--compress-level=9',
-#         '--timeout=5',
-#         source_dir,
-#         remote_destination
-#     ]
-
-#     try:
-#         print(f"Running sync command: {' '.join(command)}")
-#         process = sp.Popen(command, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-
-#         # Real-time output
-#         for line in iter(process.stdout.readline, ''):
-#             line = line.strip()
-#             if line:
-#                 print(f"Syncing: {line}")
-#                 button.config(text=f"{line[:20]}...")
-
-#         process.stdout.close()
-#         return_code = process.wait()
-
-#         if return_code == 0:
-#             button.config(text="Sync Successful")
-#             print("Data sync completed successfully")
-#         else:
-#             stderr_output = process.stderr.read().strip()
-#             print(f"Error during sync: {stderr_output}")
-#             button.config(text="Sync Failed")
-            
-#             # Show error in message box if critical
-#             if stderr_output and 'error' in stderr_output.lower():
-#                 messagebox.showerror("Sync Error", f"Failed to sync: {stderr_output[:100]}")
-
-#     except Exception as e:
-#         print(f"Unexpected error during sync: {e}")
-#         button.config(text="Error!")
-#         messagebox.showerror("Sync Error", f"Failed to sync: {str(e)}")
-
-#     finally:
-#         # Reset button after delay
-#         button.after(3000, lambda: button.config(text="Sync Data", state="normal"))
-        
-#         # Restart collection if it was running before
-#         if app and was_running:
-#             def restart_collection():
-#                 # Reset circle to appropriate state based on collection status
-#                 if app.is_running:
-#                     app.canvas.itemconfig(app.circle_id, fill="green")
-#                 else:
-#                     # Need to restart collection
-#                     app.toggle_state(None)
-                    
-#             # Schedule restart after button reset
-#             button.after(3500, restart_collection)
 
 def run_tkinter_in_thread():
     """Run the Tkinter main loop in its own dedicated thread."""
@@ -875,15 +778,10 @@ if __name__ == "__main__":
     # Initialize collector and listeners first, before Tkinter
     print("Setting up data collection components first...")
     
-    # Create SimpleCollector with a fixed password for initial startup
-    # This avoids needing a Tkinter dialog for password
-    initial_password = "startup_password"
-    collector = SimpleCollector(initial_password)
+    collector = SimpleCollector(None)
     
     # Start recording components but keep them inactive
     print("Initializing recording components in inactive state...")
-    
-    # Start all components in inactive state
     
     # Start the keystroke recorder but don't activate event processing
     collector.keystroke_recorder.start() 
