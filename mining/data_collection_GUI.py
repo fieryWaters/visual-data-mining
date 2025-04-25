@@ -19,10 +19,10 @@ class DisplayWidget:
         self.master.title("Indicator")
         self.master.overrideredirect(True)
         self.master.attributes('-topmost', True)
-        
+
         # Dark background color
         self.master.configure(bg="#2C2C2C")
-        
+
         # Position at bottom-right corner
         screen_width = self.master.winfo_screenwidth()
         screen_height = self.master.winfo_screenheight()
@@ -30,7 +30,7 @@ class DisplayWidget:
         x = screen_width - window_width - 10
         y = screen_height - window_height - 50
         self.master.geometry(f"{window_width}x{window_height}+{x}+{y}")
-        
+
         # Create a separate control window that is a child of the dot indicator
         self.control_window = tk.Toplevel(master)
         self.control_window.title("Data Collection Control")
@@ -39,39 +39,39 @@ class DisplayWidget:
 
         # Default Prompt For session
         self.session_prompt = ""   # will hold whatever the user typed
-        
+
         # Data collector integration
         self.collector = collector
-        
+
         # PyKeePass integration
         self.keepass_dialog = KeePassDialog(master)
-        
+
         # Track states
         self.is_running = False
         self.is_loading = False
-        self.is_saving_prompt = False 
-        
+        self.is_saving_prompt = False
+
         # Create a canvas to hold the circle (in the master window, which is the dot indicator)
         self.canvas = tk.Canvas(
-            self.master, 
-            width=40, 
-            height=40, 
-            highlightthickness=0, 
-            bd=0, 
+            self.master,
+            width=40,
+            height=40,
+            highlightthickness=0,
+            bd=0,
             bg="#2C2C2C"
         )
         self.canvas.pack(expand=True, fill="both")
-        
+
         # Draw the circle (initially red)
         self.circle_id = self.canvas.create_oval(5, 5, 40, 40, fill="red", outline="")
-        
+
         # Bind a mouse click on the canvas to toggle the state
         self.canvas.bind("<Button-1>", self.toggle_state)
-        
+
         # Make the dot window draggable (since it has no border)
         self.master.bind("<ButtonPress-1>", self.start_move)
         self.master.bind("<B1-Motion>", self.do_move)
-        
+
         # Connect the windows - closing dot window will close control window
         self.master.protocol("WM_DELETE_WINDOW", self.on_master_close)
         self.control_window.protocol("WM_DELETE_WINDOW", self.on_master_close)
@@ -104,7 +104,7 @@ class DisplayWidget:
                         # Make sure to run dialog on main thread
                         self.master.after(0, self._prompt_for_password)
                         return
-                    
+
                     # 1) grab the prompt
                     raw_prompt = self.prompt_widget.get("1.0", "end-1c")
                     if not raw_prompt.strip():
@@ -120,20 +120,20 @@ class DisplayWidget:
                         bg="#555555",      # lighter grey
                         fg="#888888",
                         insertbackground="#888888")
-                    
+
                     # Start collector in a dedicated thread completely separate from the UI
                     print("Starting data collector in dedicated thread...")
-                    
+
                     # Create a completely separate thread for the collector
                     collector_thread = threading.Thread(
                         target=self._start_collector_in_thread,
                         daemon=True
                     )
                     collector_thread.start()
-                    
+
                     # Wait a moment for startup to begin
                     time.sleep(0.5)
-                    
+
                     self.is_running = True
                     self.is_loading = False
                     # Update UI on main thread
@@ -163,10 +163,10 @@ class DisplayWidget:
                         self.is_running = False
                         self.is_loading = False
                         self.canvas.itemconfig(self.circle_id, fill="red")
-                    
-                    self.session_prompt = ""   
 
-                    self.master.after(2000, finish_saving) 
+                    self.session_prompt = ""
+
+                    self.master.after(2000, finish_saving)
             except Exception as e:
                 print(f"Error toggling collector: {e}")
                 self.is_loading = False
@@ -174,7 +174,7 @@ class DisplayWidget:
                 self.master.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill="red"))
 
         threading.Thread(target=toggle_collector, daemon=True).start()
-        
+
     def _start_collector_in_thread(self):
         """Run the collector.start() method in a completely isolated thread"""
         try:
@@ -186,20 +186,20 @@ class DisplayWidget:
             print(f"Error in collector thread: {e}")
             # Signal back to the UI thread that we had an error
             self.master.after(0, lambda: self.canvas.itemconfig(self.circle_id, fill="red"))
-    
+
     def _prompt_for_password(self):
         """Prompt for password on the main thread and initialize collector"""
         try:
             # Initialize KeePass database first
             keepass_initialized = self.keepass_dialog.init_database()
-            
+
             if not keepass_initialized:
                 # User may have cancelled, but we can still proceed with simple password
-                password = simpledialog.askstring("Password", 
-                                                "Enter encryption password:", 
+                password = simpledialog.askstring("Password",
+                                                "Enter encryption password:",
                                                 show='*',
                                                 parent=self.master)  # Main control window
-                
+
                 if not password:
                     self.canvas.itemconfig(self.circle_id, fill="red")
                     self.is_loading = False
@@ -208,11 +208,11 @@ class DisplayWidget:
             else:
                 # Use master password from KeePass as encryption password
                 # This is a convenience so users only need to remember one password
-                password = simpledialog.askstring("Confirm", 
-                                                "Re-enter your master password for data encryption:", 
+                password = simpledialog.askstring("Confirm",
+                                                "Re-enter your master password for data encryption:",
                                                 show='*',
                                                 parent=self.master)
-                
+
                 if not password:
                     self.canvas.itemconfig(self.circle_id, fill="red")
                     self.is_loading = False
@@ -221,14 +221,14 @@ class DisplayWidget:
 
             print("Initializing collector with password...")
             self.collector = SimpleCollector(password)
-            
+
             # If KeePass is initialized, add all passwords to sanitization
             if keepass_initialized:
                 passwords = self.keepass_dialog.get_all_passwords()
                 for pwd in passwords:
                     self.collector.add_password(pwd)
                 print(f"Added {len(passwords)} passwords for sanitization")
-            
+
             # Now toggle again to start the collection
             self.toggle_state(None)
         except Exception as e:
@@ -256,7 +256,7 @@ class DisplayWidget:
         x0 = self.master.winfo_x() + dx
         y0 = self.master.winfo_y() + dy
         self.master.geometry(f"+{x0}+{y0}")
-        
+
     def on_master_close(self):
         """Handle window closing - ensure both windows close."""
         try:
@@ -280,7 +280,7 @@ class DisplayWidget:
 
     def _save_prompt_to_log(self, prompt_txt):
         ts = time.strftime("%Y‑%m‑%d %H:%M:%S")
-        with open("session_prompts.log", "a", encoding="utf‑8") as f:
+        with open("logs/session_prompts.log", "a", encoding="utf‑8") as f:
             f.write(f"{ts}  {prompt_txt}\n")
 
 
@@ -291,13 +291,13 @@ def run_app():
     root.attributes('-topmost', True)
     root.configure(bg="#2C2C2C")
     root.geometry("50x50+0+0")  # Position will be adjusted by DisplayWidget
-    
+
     # Initialize our display widget which will create the control window
     global collector  # Use the collector we started before the UI
     app = DisplayWidget(root)
     app.collector = collector  # Connect the pre-initialized collector
     app.is_running = False  # Start in inactive state
-    
+
     # Initialize KeePass database on startup
     def initialize_keepass():
         try:
@@ -317,10 +317,10 @@ def run_app():
                 # We'll create it when user tries to use password features
         except Exception as e:
             print(f"Error initializing KeePass: {e}")
-    
+
     # Schedule KeePass initialization after UI is fully loaded
     root.after(500, initialize_keepass)
-    
+
     # Configure control window layout
     for idx, weight in ((0,0),   # title row
                         (1,0),   # status row
@@ -330,7 +330,7 @@ def run_app():
                         (5,0),   # Find Sensitive Data button
                         (6,0)):  # Sanitize Logs button
         app.control_window.rowconfigure(idx, weight=weight)
-    
+
     # Configure grid layout for control window
     app.control_window.columnconfigure(0, weight=1)
 
@@ -399,7 +399,7 @@ def run_app():
         command=lambda: view_passwords(app)
     )
     manage_pwd_button.grid(row=4, column=0, padx=10, pady=(10, 5), sticky="nsew")
-    
+
     # Find Sensitive Data button (find only)
     find_button = tk.Button(
         app.control_window,
@@ -408,7 +408,7 @@ def run_app():
         command=lambda: find_sensitive_data(app)
     )
     find_button.grid(row=5, column=0, padx=10, pady=5, sticky="nsew")
-    
+
     # Sanitize Logs button (find and replace)
     sanitize_button = tk.Button(
         app.control_window,
@@ -432,18 +432,18 @@ def run_app():
                 status_label.config(text="Status: Loading...")
             else:
                 status_label.config(text="Status: Not Running")
-            
+
             # Set up the next update if not destroyed
             if root.winfo_exists():
                 root.after(500, update_status)
         except Exception as e:
             print(f"Error updating status: {e}")
-    
+
     # The DisplayWidget class now handles window closing via on_master_close
-    
+
     # Initial status update and start event loop
     update_status()
-    
+
     # Start the application
     print("GUI initialized and ready")
     try:
@@ -481,14 +481,14 @@ def view_passwords(app):
         # Create a password viewer with the app's KeePass manager
         viewer = PasswordViewer(app.master, app.keepass_dialog.keepass_manager)
         viewer.show_dialog()
-        
+
         # If collection is active, update with any new passwords
         if app.collector is not None:
             passwords = app.keepass_dialog.get_all_passwords()
             for pwd in passwords:
                 app.collector.add_password(pwd)
             print("Updated collector with passwords")
-            
+
     except Exception as e:
         messagebox.showerror("Error", f"Failed to open password viewer: {e}")
         print(f"Error opening password viewer: {e}")
@@ -508,7 +508,7 @@ def find_sensitive_data(app):
                     parent=app.master
                 )
                 return
-                
+
             # Create a temporary sanitizer with the initialized KeePass manager
             password = simpledialog.askstring(
                 "Master Password",
@@ -518,25 +518,25 @@ def find_sensitive_data(app):
             )
             if not password:
                 return
-                
+
             sanitizer = KeystrokeSanitizer(password)
-            
+
         # Prompt user for custom search string
         custom_string = simpledialog.askstring(
             "Find Sensitive Data",
             "Enter text to search for (leave empty to use stored passwords):",
             parent=app.master
         )
-        
+
         # Show busy cursor
         app.master.config(cursor="watch")
         app.master.update()
-        
+
         # Find occurrences with optional custom string
         occurrences = sanitizer.find_occurrences(custom_string)
-        
+
         app.master.config(cursor="")  # Reset cursor
-        
+
         if not occurrences:
             messagebox.showinfo(
                 "Find Result",
@@ -544,21 +544,21 @@ def find_sensitive_data(app):
                 parent=app.master
             )
             return
-        
+
         # Show results
         total_matches = sum(occurrences.values())
         search_term = f"'{custom_string}'" if custom_string else "potential passwords"
         result_message = f"Found {total_matches} occurrences of {search_term} in {len(occurrences)} files:\n\n"
-        
+
         for file, count in occurrences.items():
             result_message += f"{file}: {count} occurrences\n"
-        
+
         messagebox.showinfo(
             "Find Result",
             result_message,
             parent=app.master
         )
-        
+
     except Exception as e:
         app.master.config(cursor="")  # Reset cursor if error
         messagebox.showerror("Error", f"Failed to find sensitive data: {e}")
@@ -579,7 +579,7 @@ def sanitize_sensitive_data(app):
                     parent=app.master
                 )
                 return
-                
+
             # Create a temporary sanitizer with the initialized KeePass manager
             password = simpledialog.askstring(
                 "Master Password",
@@ -589,23 +589,23 @@ def sanitize_sensitive_data(app):
             )
             if not password:
                 return
-                
+
             sanitizer = KeystrokeSanitizer(password)
-            
+
         # Prompt user for custom search string
         custom_string = simpledialog.askstring(
             "Sanitize Logs",
             "Enter text to search and replace (leave empty to use stored passwords):",
             parent=app.master
         )
-        
+
         # Show busy cursor
         app.master.config(cursor="watch")
         app.master.update()
-        
+
         # Find occurrences with optional custom string
         occurrences = sanitizer.find_occurrences(custom_string)
-        
+
         if not occurrences:
             app.master.config(cursor="")  # Reset cursor
             messagebox.showinfo(
@@ -614,43 +614,43 @@ def sanitize_sensitive_data(app):
                 parent=app.master
             )
             return
-        
+
         # Show results and ask for confirmation
         total_matches = sum(occurrences.values())
         search_term = f"'{custom_string}'" if custom_string else "potential passwords"
         confirm_message = f"Found {total_matches} occurrences of {search_term} in {len(occurrences)} files:\n\n"
-        
+
         for file, count in occurrences.items():
             confirm_message += f"{file}: {count} occurrences\n"
-            
+
         confirm_message += "\nDo you want to sanitize these files?"
-        
+
         confirm = messagebox.askyesno(
             "Confirm Sanitization",
             confirm_message,
             parent=app.master
         )
-        
+
         if not confirm:
             app.master.config(cursor="")  # Reset cursor
             return
-        
+
         # Perform sanitization with optional custom string
         replacements = sanitizer.sanitize_logs(custom_string)
-        
+
         app.master.config(cursor="")  # Reset cursor
-        
+
         # Show results
         total_replaced = sum(replacements.values())
         search_term = f"'{custom_string}'" if custom_string else "sensitive data"
         result_message = f"Sanitized {total_replaced} occurrences of {search_term} in {len(replacements)} files"
-        
+
         messagebox.showinfo(
             "Sanitize Result",
             result_message,
             parent=app.master
         )
-        
+
     except Exception as e:
         app.master.config(cursor="")  # Reset cursor if error
         messagebox.showerror("Error", f"Failed to sanitize logs: {e}")
@@ -659,25 +659,25 @@ def sanitize_sensitive_data(app):
 # def sync_files(button, app=None):
 #     """Sync collected data files to remote server"""
 #     was_running = False
-    
+
 #     # If collection is running and app is provided, stop collection first
 #     if app and app.is_running:
 #         print("Pausing data collection for sync...")
 #         was_running = True
 #         # Store original button appearance
 #         original_fill = app.canvas.itemcget(app.circle_id, "fill")
-        
+
 #         # Stop the collector
 #         if app.collector:
 #             app.collector.stop()
 #             app.is_running = False
-    
+
 #     # Paths based on SimpleCollector's defaults
 #     source_dir = os.path.join(os.getcwd(), 'logs')
 #     if not os.path.exists(source_dir):
 #         print(f"Creating directory: {source_dir}")
 #         os.makedirs(source_dir, exist_ok=True)
-        
+
 #     # Define remote destination with username-specific folder
 #     # Get current username for personalized upload folder
 #     try:
@@ -688,12 +688,12 @@ def sanitize_sensitive_data(app):
 #         print(f"Error getting username: {e}")
 #         # Fallback to generic name if username can't be determined
 #         remote_destination = 'data_uploader:/data/uploads/unknown_user'
-    
+
 #     # Update UI to show syncing state
 #     button.config(text="Syncing...", state="disabled")
 #     if app:
 #         app.canvas.itemconfig(app.circle_id, fill="orange")  # Orange during sync
-    
+
 #     command = [
 #         'rsync',
 #         '-avz',
@@ -727,7 +727,7 @@ def sanitize_sensitive_data(app):
 #             stderr_output = process.stderr.read().strip()
 #             print(f"Error during sync: {stderr_output}")
 #             button.config(text="Sync Failed")
-            
+
 #             # Show error in message box if critical
 #             if stderr_output and 'error' in stderr_output.lower():
 #                 messagebox.showerror("Sync Error", f"Failed to sync: {stderr_output[:100]}")
@@ -740,7 +740,7 @@ def sanitize_sensitive_data(app):
 #     finally:
 #         # Reset button after delay
 #         button.after(3000, lambda: button.config(text="Sync Data", state="normal"))
-        
+
 #         # Restart collection if it was running before
 #         if app and was_running:
 #             def restart_collection():
@@ -750,7 +750,7 @@ def sanitize_sensitive_data(app):
 #                 else:
 #                     # Need to restart collection
 #                     app.toggle_state(None)
-                    
+
 #             # Schedule restart after button reset
 #             button.after(3500, restart_collection)
 
@@ -767,12 +767,12 @@ def run_tkinter_in_thread():
 
         # Create the display widget which will create the control window
         app = DisplayWidget(root)
-        
+
         # Configure grid layout for control window
         app.control_window.columnconfigure(0, weight=1)
         for idx, weight in ((0,0), (1,0), (2,0), (3,1), (4,0), (5,0), (6,0)):
             app.control_window.rowconfigure(idx, weight=weight)
-        
+
         # App title
         title_label = tk.Label(
             app.control_window,
@@ -782,7 +782,7 @@ def run_tkinter_in_thread():
             bg="#2C2C2C"
         )
         title_label.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
-        
+
         # Status label
         status_label = tk.Label(
             app.control_window,
@@ -792,7 +792,7 @@ def run_tkinter_in_thread():
             bg="#2C2C2C"
         )
         status_label.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
-        
+
         # Sync button
         # sync_button = tk.Button(
         #     root,
@@ -828,8 +828,8 @@ def run_tkinter_in_thread():
         )
         prompt_text.grid(row=3, column=0, padx=10, pady=6, sticky="nsew")
 
-        app.prompt_widget = prompt_text 
-        
+        app.prompt_widget = prompt_text
+
         # Add password button
         add_pwd_button = tk.Button(
             app.control_window,
@@ -838,7 +838,7 @@ def run_tkinter_in_thread():
             command=lambda: add_password(app)
         )
         add_pwd_button.grid(row=4, column=0, padx=10, pady=10, sticky="nsew")
-        
+
         # Update status periodically
         def update_status():
             try:
@@ -850,49 +850,49 @@ def run_tkinter_in_thread():
                     status_label.config(text="Status: Loading...")
                 else:
                     status_label.config(text="Status: Not Running")
-                
+
                 # Set up the next update if not destroyed
                 if root.winfo_exists():
                     root.after(500, update_status)
             except Exception as e:
                 print(f"Error updating status: {e}")
-        
+
         # The DisplayWidget class handles window closing via on_master_close
-        
+
         # Initial status update
         update_status()
-        
+
         print("Tkinter thread: GUI initialized and ready")
         root.mainloop()
         print("Tkinter main loop has exited")
-    
+
     except Exception as e:
         print(f"Critical error in Tkinter thread: {e}")
 
 if __name__ == "__main__":
     print("Main thread starting")
-    
+
     # Initialize collector and listeners first, before Tkinter
     print("Setting up data collection components first...")
-    
+
     # Create SimpleCollector with a fixed password for initial startup
     # This avoids needing a Tkinter dialog for password
     initial_password = "startup_password"
     collector = SimpleCollector(initial_password)
-    
+
     # Start recording components but keep them inactive
     print("Initializing recording components in inactive state...")
-    
+
     # Start all components in inactive state
-    
+
     # Start the keystroke recorder but don't activate event processing
-    collector.keystroke_recorder.start() 
+    collector.keystroke_recorder.start()
     print("Keyboard listener initialized but not active")
-    
+
     # Initialize screen recorder but don't start capturing
     collector.screen_recorder.start()
     print("Screen recorder initialized but not capturing")
-    
+
     # Now start Tkinter with inactive collectors
     print("Now initializing Tkinter GUI...")
     run_app()  # This runs the Tkinter initialization with our pre-initialized collector
