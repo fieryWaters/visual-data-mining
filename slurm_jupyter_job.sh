@@ -1,7 +1,7 @@
 #!/bin/bash
 # This slurm job allows the user to start a jupyter notebook on the remote SFSU Cluster and get access to the GPUs
 #SBATCH --partition=gpucluster
-#SBATCH --qos=interactive
+#    SBATCH --qos=interactive
 #SBATCH --time=04:00:00
 #SBATCH --nodes=1
 #SBATCH --job-name=slurm_jupyter
