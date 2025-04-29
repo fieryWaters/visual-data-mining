@@ -37,7 +37,7 @@ def tokenize_dialogs(dialogs, images, processor):
             #  Mask all the assistant header prompt <|start_header_id|>assistant<|end_header_id|>, which has been tokenized to [128006, 78191, 128007]
         assistant_header_seq = [128006, 78191, 128007]
         labels = replace_target(assistant_header_seq,labels)
-        # Mask the padding token and image token 128256 
+        # Mask the padding token and image token 128256
         for i in range(len(labels)):
             if labels[i] == processor.tokenizer.pad_token_id or labels[i] == 128256: #  128256 is image token index
                 labels[i] = -100
@@ -52,7 +52,7 @@ def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
     dataset = dataset_dict['train']
     dataset = dataset.select(range(100))#testing
     dataset = dataset.train_test_split(test_size=1-split_ratio, shuffle=True, seed=42)[split]
-    
+
     # Convert to list of dictionaries and wrap images in lists
     converted_dataset = []
     for item in dataset:
@@ -61,8 +61,15 @@ def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
             'texts': item['texts']  # Keep texts as is
         }
         converted_dataset.append(converted_item)
-    
+
     return converted_dataset
+
+# TODO: write different version of get_custom_dataset that gets local dataset and formats it
+
+# images = ['raw_image']
+# texts = {'user': "prompt"
+#          'assistant': "expected response"}
+
 
 class OCRVQADataCollator:
     def __init__(self, processor):
@@ -83,7 +90,7 @@ class OCRVQADataCollator:
                     {"role":"user","content":[{"type": "image"},{"type": "text", "text": sample_dict["user"].strip()}]},
                     {"role":"assistant","content":[{"type": "text", "text": sample_dict["assistant"].strip()}]}
                 ]
-                
+
                 else:
                     dialog += [
                     {"role":"user","content":[{"type": "text", "text": sample_dict["user"].strip()}]},
