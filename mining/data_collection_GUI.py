@@ -552,7 +552,7 @@ def unlock_database(app):
 def view_passwords(app):
     """Show the password viewer dialog"""
     try:
-        # Create a password viewer with the app's KeePass manager
+
         viewer = PasswordViewer(app.master, app.keepass_dialog.keepass_manager)
         viewer.show_dialog()
         
@@ -565,6 +565,8 @@ def view_passwords(app):
             for pwd in passwords:
                 app.collector.add_password(pwd)
             print("Updated collector with passwords")
+            
+
             
     except Exception as e:
         messagebox.showerror("Error", f"Failed to open password viewer: {e}")

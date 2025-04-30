@@ -243,6 +243,67 @@ class KeePassManager:
             except Exception as e:
                 print(f"Error searching passwords: {e}")
                 return []
+                
+    def change_master_password(self, current_password: str, new_password: str, keyfile: Optional[str] = None) -> bool:
+        """Change the master password of the database"""
+        with self._lock:
+            if not os.path.exists(self.passwords_file):
+                return False
+                
+            try:
+                # Open the database with current credentials
+                temp_kp = PyKeePass(self.passwords_file, password=current_password, keyfile=keyfile)
+                
+                # Change the password
+                temp_kp.password = new_password
+                
+                # Save the database with new password
+                temp_kp.save()
+                
+                # Update our instance to use the new credentials
+                self.kp = temp_kp
+                self.is_initialized = True
+                self.is_locked = False
+                
+                return True
+            except Exception as e:
+                print(f"Error changing master password: {e}")
+                return False
+                
+    def create_new_database(self, new_password: str, keyfile: Optional[str] = None, transfer_entries: bool = False) -> bool:
+        """Create a new database, optionally transferring entries from the old one"""
+        with self._lock:
+            try:
+                old_entries = []
+                
+                # If transferring entries and we have an unlocked database, save the entries
+                if transfer_entries and self.is_unlocked() and self.kp:
+                    old_entries = [(entry.title, entry.username, entry.password) for entry in self.kp.entries]
+                
+                # Create new database
+                new_kp = create_database(self.passwords_file, password=new_password, keyfile=keyfile)
+                
+                # Transfer entries if requested
+                if transfer_entries and old_entries:
+                    root_group = new_kp.root_group
+                    for title, username, password in old_entries:
+                        new_kp.add_entry(root_group, title, username or "", password)
+                
+                # Save the new database
+                new_kp.save()
+                
+                # Update our instance
+                self.kp = new_kp
+                self.is_initialized = True
+                self.is_locked = False
+                
+                # Update the passwords list
+                self.passwords = self._extract_passwords()
+                
+                return True
+            except Exception as e:
+                print(f"Error creating new database: {e}")
+                return False
 
 
 if __name__ == "__main__":
