@@ -18,6 +18,7 @@ class KeePassDialog:
         self.parent = parent
         self.db_path = db_path
         self.keepass_manager = KeePassManager.get_instance(db_path)
+        self.status_var = None
         
     def init_database(self, silent=False):
         """
@@ -116,10 +117,10 @@ class KeePassDialog:
                 return False
                 
             if self.keepass_manager.check_credentials(password):
-                # Password is correct
-                self.keepass_manager.setup_encryption(password)
-                self.keepass_manager.load_passwords()
-                return True
+                # Password is correct - use unlock instead of setup_encryption
+                if self.keepass_manager.unlock(password):
+                    self.keepass_manager.load_passwords()
+                    return True
             else:
                 attempts_left = attempts - i - 1
                 if attempts_left > 0:
@@ -137,12 +138,28 @@ class KeePassDialog:
                             parent=self.parent
                         )
         return False
+        
+    def check_unlock_state(self):
+        """Update UI based on lock state"""
+        is_unlocked = self.keepass_manager.is_unlocked()
+        
+        # Return the state for other components to use
+        return is_unlocked
+        
+    def prompt_unlock(self):
+        """Explicitly prompt for unlock"""
+        if self.keepass_manager.is_unlocked():
+            # Already unlocked
+            return True
+            
+        return self._prompt_master_password(attempts=3, silent=False)
     
     def add_password(self):
         """Add a new password to the database"""
-        # Make sure database is initialized
-        if not self.keepass_manager.is_initialized:
-            result = self.init_database()
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock
+            result = self.prompt_unlock()
             if not result:
                 return False
                 
@@ -175,9 +192,10 @@ class KeePassDialog:
     
     def search_for_password(self):
         """Search for a password in the database"""
-        # Make sure database is initialized
-        if not self.keepass_manager.is_initialized:
-            result = self.init_database()
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock
+            result = self.prompt_unlock()
             if not result:
                 return []
                 
@@ -196,8 +214,8 @@ class KeePassDialog:
     
     def get_all_passwords(self):
         """Get all passwords for sanitization"""
-        # Make sure database is initialized
-        if not self.keepass_manager.is_initialized:
+        # Check if locked - if so, just return empty list
+        if not self.keepass_manager.is_unlocked():
             return []
             
         return self.keepass_manager.get_passwords()
@@ -206,9 +224,10 @@ class KeePassDialog:
         """Perform retroactive sanitization with optional custom strings"""
         from keystroke_sanitizer import KeystrokeSanitizer
         
-        # Make sure database is initialized
-        if not self.keepass_manager.is_initialized:
-            result = self.init_database()
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock
+            result = self.prompt_unlock()
             if not result:
                 return False
         
@@ -264,6 +283,13 @@ class KeePassDialog:
             
     def retroactive_sanitize_with_search(self):
         """Search for passwords and retroactively sanitize them"""
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock
+            result = self.prompt_unlock()
+            if not result:
+                return False
+        
         # Prompt for search term
         search_term = simpledialog.askstring(
             "Search for Sanitization", 

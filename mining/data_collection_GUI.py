@@ -46,6 +46,9 @@ class DisplayWidget:
         # PyKeePass integration
         self.keepass_dialog = KeePassDialog(master)
         
+        # KeePass lock status
+        self.lock_status_var = tk.StringVar(value="🔒 Locked")
+        
         # Track states
         self.is_running = False
         self.is_loading = False
@@ -184,30 +187,44 @@ class DisplayWidget:
     
     def _prompt_for_password(self):
         try:
-            keepass_initialized = self.keepass_dialog.init_database()
-            
-            if not keepass_initialized:
-                password = simpledialog.askstring("Password", 
-                                                "Enter encryption password:", 
-                                                show='*',
-                                                parent=self.master)
+            # First check if database exists
+            if self.keepass_dialog.keepass_manager.database_exists():
+                # Database exists, try to unlock it
+                if not self.keepass_dialog.keepass_manager.is_unlocked():
+                    # Need to prompt for unlock
+                    unlocked = self.keepass_dialog.prompt_unlock()
+                    if not unlocked:
+                        self.canvas.itemconfig(self.circle_id, fill="red")
+                        self.is_loading = False
+                        print("Database unlock cancelled")
+                        return
                 
-                if not password:
-                    self.canvas.itemconfig(self.circle_id, fill="red")
-                    self.is_loading = False
-                    print("Password entry cancelled")
-                    return
-            else:
+                # At this point the database should be unlocked
                 password = simpledialog.askstring("Confirm", 
-                                                "Re-enter your master password for data encryption:", 
-                                                show='*',
-                                                parent=self.master)
+                                            "Enter your master password for data encryption:", 
+                                            show='*',
+                                            parent=self.master)
                 
                 if not password:
                     self.canvas.itemconfig(self.circle_id, fill="red")
                     self.is_loading = False
                     print("Password confirmation cancelled")
                     return
+            else:
+                # No database yet, create one
+                password = simpledialog.askstring("New Password", 
+                                            "Create encryption password:", 
+                                            show='*',
+                                            parent=self.master)
+                
+                if not password:
+                    self.canvas.itemconfig(self.circle_id, fill="red")
+                    self.is_loading = False
+                    print("Password entry cancelled")
+                    return
+                    
+                # Create the database
+                self.keepass_dialog.keepass_manager.setup_encryption(password)
 
             print("Initializing collector with password...")
             self.collector = SimpleCollector(password)
@@ -225,7 +242,8 @@ class DisplayWidget:
             print("Screen recorder initializing...")
             time.sleep(1)  # Final delay
             
-            if keepass_initialized:
+            # Add passwords if database is unlocked
+            if self.keepass_dialog.keepass_manager.is_unlocked():
                 passwords = self.keepass_dialog.get_all_passwords()
                 for pwd in passwords:
                     self.collector.add_password(pwd)
@@ -303,6 +321,28 @@ def run_app():
         try:
             # Check if database file exists
             if os.path.exists("passwords.kdbx"):
+                # Add lock status label
+                lock_status_label = tk.Label(
+                    app.control_window,
+                    textvariable=app.lock_status_var,
+                    font=("Helvetica", 10, "bold"),
+                    fg="orange",
+                    bg="#2C2C2C"
+                )
+                lock_status_label.grid(row=7, column=0, padx=10, pady=(5, 10), sticky="ew")
+                
+                # Add unlock button
+                unlock_button = tk.Button(
+                    app.control_window,
+                    text="Unlock Database",
+                    font=("Helvetica", 12, "bold"),
+                    command=lambda: unlock_database(app)
+                )
+                unlock_button.grid(row=8, column=0, padx=10, pady=(0, 10), sticky="nsew")
+                
+                # Update lock status
+                update_lock_status(app)
+                
                 # Show an info message
                 messagebox.showinfo(
                     "Password Database",
@@ -460,7 +500,17 @@ def run_app():
 def add_password(app):
     """Add a password to sanitization using PyKeePass"""
     try:
-        # Use the KeePass dialog to add a password
+        # First check if database is locked
+        if not app.keepass_dialog.keepass_manager.is_unlocked():
+            # Need to unlock first
+            unlocked = app.keepass_dialog.prompt_unlock()
+            # Update lock status
+            update_lock_status(app)
+            if not unlocked:
+                # User cancelled unlock
+                return False
+                
+        # Now try to add a password
         if app.keepass_dialog.add_password():
             # If a collector is active, also add all passwords from KeePass to it
             if app.collector is not None:
@@ -475,6 +525,30 @@ def add_password(app):
         print(f"Error adding password: {e}")
         return False
 
+def update_lock_status(app):
+    """Update the lock status indicator"""
+    if app.keepass_dialog.keepass_manager.is_unlocked():
+        app.lock_status_var.set("🔓 Unlocked")
+    else:
+        app.lock_status_var.set("🔒 Locked")
+        
+def unlock_database(app):
+    """Function to unlock the database"""
+    if app.keepass_dialog.keepass_manager.is_unlocked():
+        messagebox.showinfo("Info", "Database is already unlocked.")
+        return
+        
+    # Prompt for unlock
+    unlocked = app.keepass_dialog.prompt_unlock()
+    
+    # Update status
+    update_lock_status(app)
+    
+    if unlocked:
+        messagebox.showinfo("Success", "Database unlocked successfully.")
+    else:
+        messagebox.showerror("Error", "Failed to unlock database. Please check your password.")
+
 def view_passwords(app):
     """Show the password viewer dialog"""
     try:
@@ -482,8 +556,11 @@ def view_passwords(app):
         viewer = PasswordViewer(app.master, app.keepass_dialog.keepass_manager)
         viewer.show_dialog()
         
+        # Update lock status after dialog is closed
+        update_lock_status(app)
+        
         # If collection is active, update with any new passwords
-        if app.collector is not None:
+        if app.collector is not None and app.keepass_dialog.keepass_manager.is_unlocked():
             passwords = app.keepass_dialog.get_all_passwords()
             for pwd in passwords:
                 app.collector.add_password(pwd)
@@ -501,12 +578,18 @@ def find_sensitive_data(app):
             sanitizer = app.collector.keystroke_sanitizer
         else:
             # If not initialized yet, we need to set up encryption first
-            if not app.keepass_dialog.init_database():
-                messagebox.showerror(
-                    "Error",
-                    "Password database must be initialized first.",
-                    parent=app.master
-                )
+            if not app.keepass_dialog.keepass_manager.is_unlocked():
+                unlocked = app.keepass_dialog.prompt_unlock()
+                # Update lock status
+                update_lock_status(app)
+                
+                if not unlocked:
+                    messagebox.showerror(
+                        "Error",
+                        "Password database must be unlocked first.",
+                        parent=app.master
+                    )
+                    return
                 return
                 
             # Create a temporary sanitizer with the initialized KeePass manager

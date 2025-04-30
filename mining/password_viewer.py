@@ -40,8 +40,8 @@ class PasswordViewer:
         self.dialog.grab_set()
         
         
-        # Ensure database is open before proceeding
-        if not self.keepass_manager.is_initialized:
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
             # Initialize the database with a password prompt
             master_password = simpledialog.askstring(
                 "Master Password",
@@ -54,11 +54,12 @@ class PasswordViewer:
                 self.dialog.destroy()
                 return
                 
-            success = self.keepass_manager.setup_encryption(master_password)
+            # Try to unlock with the provided password
+            success = self.keepass_manager.unlock(master_password)
             if not success:
                 messagebox.showerror(
                     "Error", 
-                    "Failed to open password database. Check your password and try again.",
+                    "Failed to unlock password database. Check your password and try again.",
                     parent=self.dialog
                 )
                 self.dialog.destroy()
@@ -107,6 +108,19 @@ class PasswordViewer:
         self.password_entries = []
         self.showing_passwords = {}
         
+        # Check if locked
+        if not self.keepass_manager.is_unlocked():
+            # Show locked message
+            label = tk.Label(
+                self.password_frame,
+                text="Password database is locked",
+                font=("Helvetica", 10),
+                fg="white",
+                bg="#2C2C2C"
+            )
+            label.pack(pady=50)
+            return
+            
         # Get passwords from the database
         password_entries = self.keepass_manager.kp.entries if hasattr(self.keepass_manager, 'kp') and self.keepass_manager.kp else []
         
@@ -257,6 +271,15 @@ class PasswordViewer:
     
     def delete_password(self, entry, entry_frame):
         """Delete a password with confirmation"""
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            messagebox.showerror(
+                "Error", 
+                "Database is locked. Cannot delete passwords.",
+                parent=self.dialog
+            )
+            return
+            
         title = entry.title or "this password"
         confirm = messagebox.askyesno(
             "Confirm Deletion",
@@ -267,15 +290,24 @@ class PasswordViewer:
         if confirm:
             # Delete from the database
             try:
-                self.keepass_manager.kp.delete_entry(entry)
-                self.keepass_manager.kp.save()
+                # Use our remove_password method that checks lock state
+                password = entry.password
+                success = self.keepass_manager.remove_password(password)
+                
+                if not success:
+                    messagebox.showerror(
+                        "Error",
+                        "Failed to delete password. Database might be locked.",
+                        parent=self.dialog
+                    )
+                    return
                 
                 # Remove from the UI
                 entry_frame.destroy()
                 
                 # Check if we need to update the UI
                 entries = []
-                if hasattr(self.keepass_manager, 'kp') and self.keepass_manager.kp:
+                if self.keepass_manager.is_unlocked() and hasattr(self.keepass_manager, 'kp') and self.keepass_manager.kp:
                     entries = self.keepass_manager.kp.entries
                     
                 if not entries:
@@ -296,6 +328,28 @@ class PasswordViewer:
     
     def add_password(self):
         """Add a new password"""
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Prompt for password
+            master_password = simpledialog.askstring(
+                "Unlock Database",
+                "Database is locked. Enter master password to unlock:",
+                show='*',
+                parent=self.dialog
+            )
+            
+            if not master_password:
+                return
+                
+            success = self.keepass_manager.unlock(master_password)
+            if not success:
+                messagebox.showerror(
+                    "Error", 
+                    "Failed to unlock database. Incorrect password.",
+                    parent=self.dialog
+                )
+                return
+        
         # Password entry dialog
         password = simpledialog.askstring(
             "Add Password",

@@ -37,6 +37,7 @@ class KeePassManager:
             self.kp = None
             self.passwords = []
             self.is_initialized = False
+            self.is_locked = True  # Start in locked state
             
             # Make this the singleton instance if it's the first creation
             if KeePassManager._instance is None:
@@ -58,18 +59,49 @@ class KeePassManager:
                     self.kp.save()
                 
                 self.is_initialized = True
+                self.is_locked = False  # Unlock the database
                 return True
             except Exception as e:
                 print(f"Error setting up encryption: {e}")
                 self.is_initialized = False
+                self.is_locked = True
                 return False
+                
+    def unlock(self, password=None, keyfile=None) -> bool:
+        """Unlock the database with provided credentials"""
+        with self._lock:
+            if not password:
+                return False
+                
+            # Check if database exists
+            if not os.path.exists(self.passwords_file):
+                return False
+                
+            try:
+                # Try to open the database
+                self.kp = PyKeePass(self.passwords_file, password=password, keyfile=keyfile)
+                self.is_initialized = True
+                self.is_locked = False
+                return True
+            except Exception as e:
+                print(f"Error unlocking database: {e}")
+                self.is_locked = True
+                return False
+                
+    def is_unlocked(self) -> bool:
+        """Check if the database is currently unlocked"""
+        return self.is_initialized and not self.is_locked
+        
+    def database_exists(self) -> bool:
+        """Check if the database file exists"""
+        return os.path.exists(self.passwords_file)
     
     def load_passwords(self) -> bool:
         """Load passwords from KeePass database"""
         with self._lock:
             try:
-                if not self.is_initialized or not self.kp:
-                    print("Encryption not set up. Call setup_encryption() first.")
+                if self.is_locked or not self.is_initialized or not self.kp:
+                    print("Database is locked or not initialized.")
                     return False
                     
                 self.passwords = self._extract_passwords()
@@ -82,8 +114,8 @@ class KeePassManager:
         """Save passwords to KeePass database"""
         with self._lock:
             try:
-                if not self.is_initialized or not self.kp:
-                    print("Encryption not set up. Call setup_encryption() first.")
+                if self.is_locked or not self.is_initialized or not self.kp:
+                    print("Database is locked or not initialized.")
                     return False
                     
                 self.kp.save()
@@ -105,8 +137,8 @@ class KeePassManager:
             bool: Success or failure
         """
         with self._lock:
-            if not self.is_initialized or not self.kp:
-                print("Encryption not set up. Call setup_encryption() first.")
+            if self.is_locked or not self.is_initialized or not self.kp:
+                print("Database is locked or not initialized.")
                 return False
                 
             try:
@@ -136,8 +168,8 @@ class KeePassManager:
     def remove_password(self, password: str) -> bool:
         """Remove a password from the KeePass database"""
         with self._lock:
-            if not self.is_initialized or not self.kp:
-                print("Encryption not set up. Call setup_encryption() first.")
+            if self.is_locked or not self.is_initialized or not self.kp:
+                print("Database is locked or not initialized.")
                 return False
                 
             try:
@@ -167,7 +199,7 @@ class KeePassManager:
     def get_passwords(self) -> List[str]:
         """Get a copy of the password list"""
         with self._lock:
-            if not self.kp:
+            if self.is_locked or not self.kp:
                 return []
                 
             # Refresh the passwords list
@@ -202,7 +234,7 @@ class KeePassManager:
     def search_password(self, password_fragment: str) -> List[str]:
         """Search for passwords containing the given fragment"""
         with self._lock:
-            if not self.is_initialized or not self.kp:
+            if self.is_locked or not self.is_initialized or not self.kp:
                 return []
                 
             try:

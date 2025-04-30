@@ -11,7 +11,6 @@ from datetime import datetime
 from keystroke_recorder import KeystrokeRecorder
 from keystroke_sanitizer import KeystrokeSanitizer
 from screen_recorder import InMemoryScreenRecorder
-from utils.keepass_manager import KeePassManager
 
 class SimpleCollector:
     """Minimalist implementation of the data collection system"""
