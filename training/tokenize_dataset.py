@@ -4,6 +4,11 @@ from datasets import load_dataset
 import itertools
 import torch
 
+import json
+from pathlib import Path
+from PIL import Image
+from datasets import load_from_disk
+
 # check system prompt token seq or user prompt token seq is in the current token list
 def check_header(targets,seq):
     for i in range(len(seq)-3):
@@ -45,30 +50,53 @@ def tokenize_dialogs(dialogs, images, processor):
     batch["labels"] = torch.tensor(label_list)
     return batch
 
+# ##### Previous Version #####
+# def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
+#     dataset_dict = load_dataset("jwaters8978/synthetic_dataset", name="default")
+#     #dataset_dict = load_dataset("jwaters8978/web_scraper_dataset_2", name="default")
+#     dataset = dataset_dict['train']
+#     dataset = dataset.select(range(100))#testing
+#     dataset = dataset.train_test_split(test_size=1-split_ratio, shuffle=True, seed=42)[split]
+
+#     # Convert to list of dictionaries and wrap images in lists
+#     converted_dataset = []
+#     for item in dataset:
+#         converted_item = {
+#             'images': [item['images']],  # Wrap the single image in a list
+#             'texts': item['texts']  # Keep texts as is
+#         }
+#         converted_dataset.append(converted_item)
+
+#     return converted_dataset
+
 
 def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
-    dataset_dict = load_dataset("jwaters8978/synthetic_dataset", name="default")
-    #dataset_dict = load_dataset("jwaters8978/web_scraper_dataset_2", name="default")
-    dataset = dataset_dict['train']
-    dataset = dataset.select(range(100))#testing
+    # data_dir = Path('../data/processed')
+    image_dir = Path('../mining/logs/screenshots')
+    # json_path = data_dir / Path('matched_clicks.json')
+
+    # Load local dataset
+    dataset = load_from_disk('../data/processed/hf_click_image_dataset')
+    # dataset = dataset.select(range(100))#testing
     dataset = dataset.train_test_split(test_size=1-split_ratio, shuffle=True, seed=42)[split]
 
     # Convert to list of dictionaries and wrap images in lists
-    converted_dataset = []
+    dataset = []
     for item in dataset:
-        converted_item = {
-            'images': [item['images']],  # Wrap the single image in a list
-            'texts': item['texts']  # Keep texts as is
-        }
-        converted_dataset.append(converted_item)
+        image_path = image_dir / item['matched_screenshot_filename']
 
-    return converted_dataset
+        if image_path.exists():
+            img = Image.open(image_path).convert('RGB')  # convert to RGB to be safe
+            record = {
+                'images': [img],
+                'texts': [{
+                            'user': "",
+                            'assistant': f"[{item['click_x']}, {item['click_y']}]"
+                         }]
+            }
+            dataset.append(record)
 
-# TODO: write different version of get_custom_dataset that gets local dataset and formats it
-
-# images = ['raw_image']
-# texts = {'user': "prompt"
-#          'assistant': "expected response"}
+    return dataset
 
 
 class OCRVQADataCollator:
