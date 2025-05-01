@@ -81,7 +81,7 @@ def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
     dataset = dataset.train_test_split(test_size=1-split_ratio, shuffle=True, seed=42)[split]
 
     # Convert to list of dictionaries and wrap images in lists
-    dataset = []
+    converted_dataset = []
     for item in dataset:
         image_path = image_dir / item['matched_screenshot_filename']
 
@@ -94,9 +94,9 @@ def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
                             'assistant': f"[{item['click_x']}, {item['click_y']}]"
                          }]
             }
-            dataset.append(record)
+            converted_dataset.append(record)
 
-    return dataset
+    return converted_dataset
 
 
 class OCRVQADataCollator:
