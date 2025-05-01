@@ -80,7 +80,7 @@ class SimpleCollector:
                 print(f"Error in processing: {e}")
             
             # Wait before next processing
-            time.sleep(10)
+            time.sleep(120)
     
     def start(self):
         """Start all recording components"""
