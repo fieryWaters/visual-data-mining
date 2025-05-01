@@ -19,18 +19,13 @@ class SimpleCollector:
         # Create directories
         os.makedirs(output_dir, exist_ok=True)
         
-        # Initialize components
-        self.passwords_file = os.path.join(output_dir, 'secret.keys')
+        # Initialize components with shared password manager
         self.keystroke_recorder = KeystrokeRecorder(buffer_size=1000)
-        self.keystroke_sanitizer = KeystrokeSanitizer(passwords_file=self.passwords_file)
+        self.keystroke_sanitizer = KeystrokeSanitizer(password)
         self.screen_recorder = InMemoryScreenRecorder(max_frames=300)
         
         # Initialize file paths
         self.output_dir = output_dir
-        
-        # Set up password encryption
-        self.keystroke_sanitizer.setup_encryption(password)
-        self.keystroke_sanitizer.load_passwords()
         
         # Internal state
         self.running = False
@@ -39,9 +34,11 @@ class SimpleCollector:
     
     def add_password(self, password):
         """Add a password to sanitize"""
-        self.keystroke_sanitizer.add_password(password)
-        self.keystroke_sanitizer.save_passwords()
-        print(f"Added password: {password}")
+        result = self.keystroke_sanitizer.add_password(password)
+        if result:
+            self.keystroke_sanitizer.save_passwords()
+            print("Added password to sanitization list")
+        return result
     
     def _process_buffer(self):
         """Process keystroke buffer and save screenshots every 5 seconds"""
@@ -83,7 +80,7 @@ class SimpleCollector:
                 print(f"Error in processing: {e}")
             
             # Wait before next processing
-            time.sleep(10)
+            time.sleep(120)
     
     def start(self):
         """Start all recording components"""
@@ -175,8 +172,8 @@ if __name__ == "__main__":
     collector = SimpleCollector(password)
     
     # Add test passwords
-    collector.add_password("secret123")
-    collector.add_password("password123")
+    collector.add_password("test_password1")
+    collector.add_password("test_password2")
     
     # Start collection
     collector.start()

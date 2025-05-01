@@ -15,7 +15,7 @@ Usage:
 Available modules:
     - sanitizer     - Tests for the KeystrokeSanitizer (refactored version)
     - fuzzy_matcher - Tests for the FuzzyMatcher utility
-    - password_manager - Tests for the PasswordManager utility
+    - keepass_manager - Tests for the KeePassManager utility
     - text_buffer   - Tests for the TextBuffer utility
     - all           - Runs all tests (default)
 
@@ -38,7 +38,7 @@ def run_all_tests():
     core_test_files = [
         'test_keystroke_sanitizer.py',
         'test_fuzzy_matcher.py',
-        'test_password_manager.py',
+        'test_keepass_manager.py',
         'test_text_buffer.py'
     ]
     
@@ -110,7 +110,7 @@ def run_specific_module(module_name, test_number=None):
     module_map = {
         'sanitizer': 'test_keystroke_sanitizer.py',
         'fuzzy_matcher': 'test_fuzzy_matcher.py',
-        'password_manager': 'test_password_manager.py',
+        'keepass_manager': 'test_keepass_manager.py',
         'text_buffer': 'test_text_buffer.py'
     }
     
