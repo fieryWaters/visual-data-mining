@@ -1,0 +1,55 @@
+# CPU Cluster Test Configuration (Small Dataset)
+
+# Dataset configuration
+dataset:
+  name: "custom_dataset"
+  file: "test_dataset.py"  # Use test dataset implementation with 100 samples
+  test_split: "test"
+  split_ratio: 0.8
+  subset_size: 100
+  use_subset: true  # Use subset of data for testing
+
+# Model configuration
+model:
+  name: "meta-llama/Llama-3.2-11B-Vision-Instruct"
+  type: "vision"
+  peft: true
+  peft_method: "lora"
+  use_fast_kernels: true
+
+# Checkpoint configuration
+checkpoint:
+  root_dir: "finetuned_model_cpu_test"  # Separate directory for CPU test runs
+  dir_name: "fine-tuned"
+  create_backups: false  # No need for backups in test mode
+  backup_format: "fine-tuned_backup_job_{job_num}"
+
+# Training parameters
+training:
+  batch_size: 4  # Smaller batch size for CPU
+  lr: 1e-5
+  weight_decay: 0.01
+  gamma: 0.85
+  epochs_per_job: 1
+  total_jobs: 1  # Only one job for testing
+  gradient_accumulation_steps: 2  # Increase for CPU
+  run_validation: true
+  enable_fsdp: false  # Disable FSDP on CPU
+  batching_strategy: "padding"
+  use_wandb: false  # No wandb in test mode
+
+# SLURM configuration
+slurm:
+  partition: "cpucluster"  # Use CPU cluster instead of GPU
+  time: "12:00:00"  # Maximum time for cpucluster (12 hours)
+  nodes: 1
+  job_name: "llama_cpu_test"
+  output_path: "logs/cpu_test_job_%j.log"
+  gpu_id: 0  # Not used on CPU, but kept for compatibility
+
+# Evaluation configuration
+evaluation:
+  batch_size: 4
+  visualize: true  # Visualize results for test runs
+  metrics: ["distance"]
+  peft_model_path: "finetuned_model_cpu_test/fine-tuned/peft_weights/"
