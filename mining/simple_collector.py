@@ -11,7 +11,6 @@ from datetime import datetime
 from keystroke_recorder import KeystrokeRecorder
 from keystroke_sanitizer import KeystrokeSanitizer
 from screen_recorder import InMemoryScreenRecorder
-from utils.keepass_manager import KeePassManager
 
 class SimpleCollector:
     """Minimalist implementation of the data collection system"""
@@ -81,7 +80,7 @@ class SimpleCollector:
                 print(f"Error in processing: {e}")
             
             # Wait before next processing
-            time.sleep(10)
+            time.sleep(120)
     
     def start(self):
         """Start all recording components"""

@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH --partition=gpucluster
-#SBATCH --qos=interactive
 #SBATCH --time=04:00:00
 #SBATCH --nodes=1
 #SBATCH --job-name=llama_training

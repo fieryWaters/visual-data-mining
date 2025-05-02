@@ -18,6 +18,7 @@ class KeePassDialog:
         self.parent = parent
         self.db_path = db_path
         self.keepass_manager = KeePassManager.get_instance(db_path)
+        self.status_var = None
         
     def init_database(self, silent=False):
         """
@@ -116,10 +117,10 @@ class KeePassDialog:
                 return False
                 
             if self.keepass_manager.check_credentials(password):
-                # Password is correct
-                self.keepass_manager.setup_encryption(password)
-                self.keepass_manager.load_passwords()
-                return True
+                # Password is correct - use unlock instead of setup_encryption
+                if self.keepass_manager.unlock(password):
+                    self.keepass_manager.load_passwords()
+                    return True
             else:
                 attempts_left = attempts - i - 1
                 if attempts_left > 0:
@@ -137,12 +138,28 @@ class KeePassDialog:
                             parent=self.parent
                         )
         return False
+        
+    def check_unlock_state(self):
+        """Update UI based on lock state"""
+        is_unlocked = self.keepass_manager.is_unlocked()
+        
+        # Return the state for other components to use
+        return is_unlocked
+        
+    def prompt_unlock(self):
+        """Explicitly prompt for unlock"""
+        if self.keepass_manager.is_unlocked():
+            # Already unlocked
+            return True
+            
+        return self._prompt_master_password(attempts=3, silent=False)
     
     def add_password(self):
         """Add a new password to the database"""
-        # Make sure database is initialized
-        if not self.keepass_manager.is_initialized:
-            result = self.init_database()
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock
+            result = self.prompt_unlock()
             if not result:
                 return False
                 
@@ -175,9 +192,10 @@ class KeePassDialog:
     
     def search_for_password(self):
         """Search for a password in the database"""
-        # Make sure database is initialized
-        if not self.keepass_manager.is_initialized:
-            result = self.init_database()
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock
+            result = self.prompt_unlock()
             if not result:
                 return []
                 
@@ -196,8 +214,8 @@ class KeePassDialog:
     
     def get_all_passwords(self):
         """Get all passwords for sanitization"""
-        # Make sure database is initialized
-        if not self.keepass_manager.is_initialized:
+        # Check if locked - if so, just return empty list
+        if not self.keepass_manager.is_unlocked():
             return []
             
         return self.keepass_manager.get_passwords()
@@ -206,9 +224,10 @@ class KeePassDialog:
         """Perform retroactive sanitization with optional custom strings"""
         from keystroke_sanitizer import KeystrokeSanitizer
         
-        # Make sure database is initialized
-        if not self.keepass_manager.is_initialized:
-            result = self.init_database()
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock
+            result = self.prompt_unlock()
             if not result:
                 return False
         
@@ -262,8 +281,166 @@ class KeePassDialog:
             )
             return False
             
+    def change_master_password(self):
+        """Change the master password of the KeePass database"""
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock first
+            result = self.prompt_unlock()
+            if not result:
+                messagebox.showerror(
+                    "Error",
+                    "Database must be unlocked first to change password.",
+                    parent=self.parent
+                )
+                return False
+        
+        # Prompt for current password to confirm
+        current_password = simpledialog.askstring(
+            "Confirm Current Password", 
+            "Enter current master password:", 
+            show='*',
+            parent=self.parent
+        )
+        
+        if not current_password:
+            return False
+            
+        # Verify current password
+        if not self.keepass_manager.check_credentials(current_password):
+            messagebox.showerror(
+                "Error", 
+                "Incorrect current password.",
+                parent=self.parent
+            )
+            return False
+            
+        # Prompt for new password
+        new_password = simpledialog.askstring(
+            "New Master Password", 
+            "Enter new master password:", 
+            show='*',
+            parent=self.parent
+        )
+        
+        if not new_password:
+            return False
+            
+        # Confirm new password
+        confirm_password = simpledialog.askstring(
+            "Confirm New Password", 
+            "Confirm new master password:", 
+            show='*',
+            parent=self.parent
+        )
+        
+        if not confirm_password or new_password != confirm_password:
+            messagebox.showerror(
+                "Error", 
+                "New passwords do not match.",
+                parent=self.parent
+            )
+            return False
+            
+        # Change the password
+        success = self.keepass_manager.change_master_password(current_password, new_password)
+        
+        if success:
+            messagebox.showinfo(
+                "Success", 
+                "Master password changed successfully.",
+                parent=self.parent
+            )
+            return True
+        else:
+            messagebox.showerror(
+                "Error", 
+                "Failed to change master password.",
+                parent=self.parent
+            )
+            return False
+    
+    def create_new_keyring(self):
+        """Create a new KeePass database, optionally transferring entries"""
+        # Check if database exists
+        transfer_entries = False
+        
+        if os.path.exists(self.db_path):
+            # Ask if user wants to overwrite existing database
+            confirm = messagebox.askyesno(
+                "Confirm Overwrite",
+                "A password database already exists. Creating a new one will overwrite it. Continue?",
+                parent=self.parent
+            )
+            
+            if not confirm:
+                return False
+                
+            # If database is unlocked, ask if user wants to transfer entries
+            if self.keepass_manager.is_unlocked():
+                transfer = messagebox.askyesno(
+                    "Transfer Passwords",
+                    "Do you want to transfer existing passwords to the new database?",
+                    parent=self.parent
+                )
+                
+                transfer_entries = transfer
+        
+        # Prompt for new master password
+        new_password = simpledialog.askstring(
+            "New Master Password", 
+            "Enter new master password:", 
+            show='*',
+            parent=self.parent
+        )
+        
+        if not new_password:
+            return False
+            
+        # Confirm new password
+        confirm_password = simpledialog.askstring(
+            "Confirm Password", 
+            "Confirm new master password:", 
+            show='*',
+            parent=self.parent
+        )
+        
+        if not confirm_password or new_password != confirm_password:
+            messagebox.showerror(
+                "Error", 
+                "Passwords do not match.",
+                parent=self.parent
+            )
+            return False
+            
+        # Create the new database
+        success = self.keepass_manager.create_new_database(new_password, transfer_entries=transfer_entries)
+        
+        if success:
+            messagebox.showinfo(
+                "Success", 
+                f"New password database created at {self.db_path}" + 
+                (" with transferred passwords." if transfer_entries else "."),
+                parent=self.parent
+            )
+            return True
+        else:
+            messagebox.showerror(
+                "Error", 
+                "Failed to create new password database.",
+                parent=self.parent
+            )
+            return False
+            
     def retroactive_sanitize_with_search(self):
         """Search for passwords and retroactively sanitize them"""
+        # Check if database is locked
+        if not self.keepass_manager.is_unlocked():
+            # Try to unlock
+            result = self.prompt_unlock()
+            if not result:
+                return False
+        
         # Prompt for search term
         search_term = simpledialog.askstring(
             "Search for Sanitization", 
