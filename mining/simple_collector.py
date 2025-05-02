@@ -128,13 +128,15 @@ class SimpleCollector:
         if self.process_thread:
             self.process_thread.join(timeout=2)
         
+        # Create required directories
+        json_dir = os.path.join(self.output_dir, 'sanitized_json')
+        screenshots_dir = os.path.join(self.output_dir, 'screenshots')
+        os.makedirs(json_dir, exist_ok=True)
+        os.makedirs(screenshots_dir, exist_ok=True)
+        
         # Process any final events
         events = self.keystroke_recorder.get_buffer_contents()
         if events:
-            # Create required directories
-            json_dir = os.path.join(self.output_dir, 'sanitized_json')
-            os.makedirs(json_dir, exist_ok=True)
-            
             # Process and save
             sanitized = self.keystroke_sanitizer.process_events(events)
             
@@ -143,6 +145,14 @@ class SimpleCollector:
             json_path = os.path.join(json_dir, f"sanitized_{timestamp}_final.json")
             self.keystroke_sanitizer.save_sanitized_json(sanitized, json_path)
             print(f"Processed final {len(events)} events")
+        
+        # Save any final screenshots before deactivating
+        saved_files = self.screen_recorder.save_frames_to_disk(
+            screenshots_dir, 
+            format='jpg'
+        )
+        if saved_files:
+            print(f"Saved {len(saved_files)} final screenshots")
         
         # Deactivate both recorders (but don't fully stop them)
         self.keystroke_recorder.set_active(False)
