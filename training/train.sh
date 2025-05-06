@@ -11,10 +11,19 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
+# Set up environment
+source ~/git-repos/visual-data-mining/venv/bin/activate
+cd ~/git-repos/visual-data-mining/training
+
+# Make sure torchrun is available
+which torchrun || echo "torchrun not found in PATH"
+
 # Load configuration values using Python
 echo "Loading configuration from $CONFIG_FILE..."
 CONFIG_VALUES=$(python3 -c "
 import json
+import sys
+sys.path.append('.')
 from config_loader import load_config, get_slurm_config, get_training_config, get_dataset_file
 
 # Load the configuration
