@@ -38,8 +38,9 @@ fi
 
 source "$TRAINING_VENV_DIR/bin/activate"
 
-# Install requirements using regular pip after sourcing venv
-pip install -r ~/git-repos/visual-data-mining/training/training_requirements.txt
+# Install uv and use it to install requirements
+pip install uv
+uv pip install -r ~/git-repos/visual-data-mining/training/training_requirements.txt
 
 # Set up wandb run ID tracking
 if [ $JOB_NUM -eq 1 ]; then
@@ -86,7 +87,20 @@ run_training() {
    #ls -R $CHECKPOINT_ROOT
    #echo "Using training run ID: $TRAINING_RUN_ID"
 
-CUDA_VISIBLE_DEVICES=3 torchrun --nnodes 1 --nproc_per_node 1 finetuning.py \
+# Find an available port for torchrun
+PORT=$(python3 -c "
+import socket
+def find_free_port():
+    s = socket.socket()
+    s.bind(('', 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+print(find_free_port())
+")
+echo "Using port $PORT for distributed training"
+
+CUDA_VISIBLE_DEVICES=3 torchrun --nnodes 1 --nproc_per_node 1 --rdzv_endpoint=localhost:$PORT finetuning.py \
     --enable_fsdp \
     --lr 1e-5 \
     --num_epochs $EPOCHS_PER_JOB \
