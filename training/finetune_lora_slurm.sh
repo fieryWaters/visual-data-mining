@@ -5,7 +5,7 @@
 #SBATCH --job-name=llama_training
 #SBATCH --output=logs/training_job_%j.log
 
-N=10  # This will run the training N times sequentially (number of jobs)
+N=2  # This will run the training N times sequentially (number of jobs)
 JOB_NUM=${1:-1}
 EPOCHS_PER_JOB=1  # Number of epochs per job
 CHECKPOINT_ROOT="./finetuned_model"
@@ -16,8 +16,30 @@ PEFT_WEIGHTS_DIR="${FULL_CHECKPOINT_PATH}/peft_weights"
 echo "Starting training job number $JOB_NUM at $(date)"
 echo "Running on node: $(hostname)"
 
+# Directory resolution test
+echo "Job ID: $SLURM_JOB_ID on $(hostname). Initial PWD: $(pwd)"
+echo "1. SLURM_SUBMIT_DIR: $SLURM_SUBMIT_DIR"
+echo "2. BASH_SOURCE_DIR: $( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SCRIPT_PATH_M3="$0"; SCRIPT_DIR_REL_M3="."; if [[ "$SCRIPT_PATH_M3" == *"/"* ]]; then SCRIPT_DIR_REL_M3="$(dirname "$SCRIPT_PATH_M3")"; fi
+echo "3. SCRIPT_0_DIR: $(cd "$SCRIPT_DIR_REL_M3" &> /dev/null && pwd)"
+echo "4. SCONTROL_WORKDIR: $(scontrol show job "$SLURM_JOB_ID" | awk -F= '/WorkDir=/{print $2}' | head -n1)"
+SCTRL_CMD_PATH=$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}' | head -n1); SCTRL_CMD_DIR="N/A"; if [[ "$SCTRL_CMD_PATH" == /* ]]; then SCTRL_CMD_DIR=$(dirname "$SCTRL_CMD_PATH"); else SCTRL_CMD_DIR_REL=$(dirname "$SCTRL_CMD_PATH"); SCTRL_CMD_DIR="$(cd "$SCTRL_CMD_DIR_REL" &> /dev/null && pwd)"; fi
+echo "5. SCONTROL_CMD_DIR: $SCTRL_CMD_DIR"
+echo "Test Complete: concise_dir_test_output_${SLURM_JOB_ID}.txt"
+
 # Set up environment
-source ~/git-repos/visual-data-mining/venv_visual_data_mining/bin/activate
+TRAINING_VENV_DIR=~/git-repos/visual-data-mining/training/training_venv
+
+# Create venv if it doesn't exist
+if [ ! -d "$TRAINING_VENV_DIR" ]; then
+    echo "Creating training virtual environment..."
+    python3.11 -m venv "$TRAINING_VENV_DIR" || python3 -m venv "$TRAINING_VENV_DIR"
+fi
+
+source "$TRAINING_VENV_DIR/bin/activate"
+
+# Install requirements using regular pip after sourcing venv
+pip install -r ~/git-repos/visual-data-mining/training/training_requirements.txt
 
 # Set up wandb run ID tracking
 if [ $JOB_NUM -eq 1 ]; then
