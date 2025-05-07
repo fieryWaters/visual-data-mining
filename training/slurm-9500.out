@@ -1,0 +1,11 @@
+/var/spool/slurm/d/job09500/slurm_script: line 15: /Users/924284072/git-repos/visual-data-mining/venv/bin/activate: No such file or directory
+/usr/bin/which: no torchrun in (/Users/924284072/node_modules/.bin:/Users/924284072/.nvm/versions/node/v22.14.0/bin:/Users/924284072/.local/bin:/Users/924284072/bin:/opt/clmgr/sbin:/opt/clmgr/bin:/opt/sgi/sbin:/opt/sgi/bin:/usr/share/Modules/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/opt/c3/bin:/sbin:/bin)
+torchrun not found in PATH
+Loading configuration from configs/example_config.yaml...
+Starting training job number 1 at Tue May  6 19:44:53 PDT 2025
+Running on node: lmn1
+Using dataset implementation: synthetic_dataset.py
+Checkpoint directory: finetuned_model/fine-tuned
+Starting fresh training without PEFT checkpoint
+/var/spool/slurm/d/job09500/slurm_script: line 113: torchrun: command not found
+Training job 1 failed at Tue May  6 19:44:53 PDT 2025

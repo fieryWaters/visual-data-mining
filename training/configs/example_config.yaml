@@ -44,7 +44,7 @@ slurm:
   time: "04:00:00"
   nodes: 1
   job_name: "llama_training"
-  output_path: "logs/training_job_%j.log"
+  output_path: "logs/pipeline_refactor_%j.log"
   gpu_id: 3  # CUDA_VISIBLE_DEVICES value
 
 # Wandb configuration
