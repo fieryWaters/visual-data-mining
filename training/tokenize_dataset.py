@@ -71,30 +71,22 @@ def tokenize_dialogs(dialogs, images, processor):
 
 
 def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
-    # data_dir = Path('../data/processed')
-    image_dir = Path('../mining/logs/screenshots')
-    # json_path = data_dir / Path('matched_clicks.json')
-
     # Load local dataset
     dataset = load_from_disk('../data/processed/hf_click_image_dataset')
-    # dataset = dataset.select(range(100))#testing
+    dataset = dataset.select(range(100))#testing
     dataset = dataset.train_test_split(test_size=1-split_ratio, shuffle=True, seed=42)[split]
 
     # Convert to list of dictionaries and wrap images in lists
     converted_dataset = []
     for item in dataset:
-        image_path = image_dir / item['matched_screenshot_filename']
-
-        if image_path.exists():
-            img = Image.open(image_path).convert('RGB')  # convert to RGB to be safe
-            record = {
-                'images': [img],
-                'texts': [{
-                            'user': "",
-                            'assistant': f"[{item['click_x']}, {item['click_y']}]"
-                         }]
-            }
-            converted_dataset.append(record)
+        record = {
+            'images': [item['screenshot_image']],
+            'texts': [{
+                        'user': "",
+                        'assistant': f"[{item['click_x']}, {item['click_y']}]"
+                        }]
+        }
+        converted_dataset.append(record)
 
     return converted_dataset
 
