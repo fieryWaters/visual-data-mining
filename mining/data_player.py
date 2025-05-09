@@ -314,7 +314,18 @@ class DataPlayer:
         self.master.minsize(800, 600)
         
         # Set data directory
-        self.logs_dir = logs_dir or os.path.join(os.getcwd(), 'logs')
+        # If logs_dir not specified, look for the most recent logs_* directory
+        if not logs_dir:
+            log_dirs = [d for d in glob.glob(os.path.join(os.getcwd(), 'logs_*')) if os.path.isdir(d)]
+            if log_dirs:
+                # Sort by modification time (newest first)
+                log_dirs.sort(key=os.path.getmtime, reverse=True)
+                logs_dir = log_dirs[0]
+            else:
+                # Fallback to old 'logs' directory if no logs_* found
+                logs_dir = os.path.join(os.getcwd(), 'logs')
+
+        self.logs_dir = logs_dir
         self.screenshots_dir = os.path.join(self.logs_dir, 'screenshots')
         self.sanitized_dir = os.path.join(self.logs_dir, 'sanitized_json')
         

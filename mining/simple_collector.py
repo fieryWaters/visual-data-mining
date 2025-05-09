@@ -6,27 +6,44 @@ Simplified data collector that integrates keystroke recording, sanitization, and
 import os
 import time
 import threading
+import subprocess
 from datetime import datetime
 
 from keystroke_recorder import KeystrokeRecorder
 from keystroke_sanitizer import KeystrokeSanitizer
 from screen_recorder import InMemoryScreenRecorder
 
+def get_commit_hash():
+    """Get the current git commit short hash"""
+    try:
+        result = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
+                               capture_output=True, text=True, check=True)
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
 class SimpleCollector:
     """Minimalist implementation of the data collection system"""
-    
-    def __init__(self, password, output_dir='logs'):
+
+    def __init__(self, password, output_dir=None):
+        # Get commit hash for the logs directory
+        commit_hash = get_commit_hash()
+
+        # Set the output directory with commit hash if not specified
+        if output_dir is None:
+            output_dir = f'logs_{commit_hash}'
+
         # Create directories
         os.makedirs(output_dir, exist_ok=True)
-        
+
         # Initialize components with shared password manager
         self.keystroke_recorder = KeystrokeRecorder(buffer_size=1000)
         self.keystroke_sanitizer = KeystrokeSanitizer(password)
         self.screen_recorder = InMemoryScreenRecorder(max_frames=300)
-        
+
         # Initialize file paths
         self.output_dir = output_dir
-        
+
         # Internal state
         self.running = False
         self.stop_event = threading.Event()
@@ -179,17 +196,17 @@ class SimpleCollector:
 if __name__ == "__main__":
     # Simple usage example
     password = input("Enter encryption password: ")
-    collector = SimpleCollector(password)
-    
+    collector = SimpleCollector(password)  # Uses default logs_[commit_hash] directory
+
     # Add test passwords
     collector.add_password("test_password1")
     collector.add_password("test_password2")
-    
+
     # Start collection
     collector.start()
-    
+
     try:
-        print("Recording... (Press Ctrl+C to stop)")
+        print(f"Recording to {collector.output_dir}... (Press Ctrl+C to stop)")
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
