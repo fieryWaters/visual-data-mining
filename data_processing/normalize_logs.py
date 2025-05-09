@@ -153,15 +153,15 @@ def main():
     os.makedirs(OUTPUT_SCREENSHOTS_DIR, exist_ok=True)
     os.makedirs(OUTPUT_JSON_DIR, exist_ok=True)
     
-    # Step 1: Filter files by date (after April 23, 2025)
-    cutoff_date = datetime(2025, 4, 23, 23, 59, 59).timestamp()
+    # Step 1: Filter files by date (after April 30, 2025)
+    cutoff_date = datetime(2025, 4, 30, 23, 59, 59).timestamp()
     print(f"Filtering out data on or before: {datetime.fromtimestamp(cutoff_date)}")
     
     # Filter JSON files by date in filename
     all_json_files = glob.glob(os.path.join(JSON_DIR, "*.json"))
     json_files = []
-    
-    for filepath in all_json_files:
+
+    for filepath in tqdm(all_json_files, desc="Filtering JSON files by date"):
         filename = os.path.basename(filepath)
         # Extract date from sanitized_YYYYMMDD_* pattern
         date_match = re.search(r'sanitized_(\d{8})_', filename)
@@ -170,12 +170,12 @@ def main():
             file_timestamp = datetime.strptime(file_date, "%Y%m%d").timestamp()
             if file_timestamp > cutoff_date:
                 json_files.append(filepath)
-    
+
     # Filter screenshot files by date in filename
     all_screenshot_files = glob.glob(os.path.join(SCREENSHOTS_DIR, "*.jpg"))
     screenshot_files = []
-    
-    for filepath in all_screenshot_files:
+
+    for filepath in tqdm(all_screenshot_files, desc="Filtering screenshots by date"):
         filename = os.path.basename(filepath)
         # Extract date from screen_YYYYMMDD_* pattern
         date_match = re.search(r'screen_(\d{8})_', filename)
@@ -327,15 +327,63 @@ def main():
     files_with_nonnormalized_coords = sum(1 for result in json_results if result.get("normalized", False))
     total_events_normalized = sum(result.get("events_normalized", 0) for result in json_results)
     
+    # Scan sanitized files for max X/Y values and out-of-range coordinates
+    max_norm_x, max_norm_y = 0, 0
+    total_events = 0
+    out_of_range_events = 0
+    latest_out_of_range_timestamp = 0
+    latest_out_of_range_file = ""
+
+    for filepath in tqdm(glob.glob(os.path.join(OUTPUT_JSON_DIR, "*.json")), desc="Analyzing normalized coordinates"):
+        with open(filepath, 'r') as f:
+            data = json.load(f)
+
+        for event in data.get('events', []):
+            if event.get('event') == 'MOUSE':
+                total_events += 1
+                x_val = event.get('x', 0)
+                y_val = event.get('y', 0)
+
+                max_norm_x = max(max_norm_x, x_val)
+                max_norm_y = max(max_norm_y, y_val)
+
+                # Check if coordinates exceed normalized range (0-1)
+                if x_val > 1.0 or y_val > 1.0:
+                    out_of_range_events += 1
+                    if 'timestamp' in event:
+                        ts = event['timestamp']
+                        if isinstance(ts, str):
+                            try:
+                                dt = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+                                timestamp = dt.timestamp()
+                            except:
+                                continue
+                        else:
+                            timestamp = ts / 1000 if ts > 1e10 else ts
+
+                        if timestamp > latest_out_of_range_timestamp:
+                            latest_out_of_range_timestamp = timestamp
+                            latest_out_of_range_file = filepath
+
     print(f"JSON processing complete:")
     print(f"- Files processed successfully: {success_json}")
     print(f"- Errors: {error_json}")
     print(f"- Files with coordinates normalized: {files_with_nonnormalized_coords}")
     print(f"- Total events normalized: {total_events_normalized}")
+    print(f"- Max normalized X: {max_norm_x:.6f}, Max normalized Y: {max_norm_y:.6f}")
+
+    # Report out-of-range coordinates
+    print(f"\nOut-of-range coordinate analysis:")
+    percentage = (out_of_range_events/total_events*100) if total_events > 0 else 0
+    print(f"- Events with coordinates > 1.0: {out_of_range_events} out of {total_events} ({percentage:.2f}%)")
+
+    if latest_out_of_range_timestamp > 0:
+        latest_date = datetime.fromtimestamp(latest_out_of_range_timestamp)
+        latest_file = os.path.basename(latest_out_of_range_file)
+        print(f"- Latest out-of-range event: {latest_date} in file {latest_file}")
     
     # Step 5: Process filtered screenshots - resize and save
     print("Processing filtered screenshots...")
-    """
     # Create dataset for parallel processing
     screenshots_dataset = Dataset.from_dict({"filepath": activity_filtered_screenshots})
     
@@ -364,7 +412,7 @@ def main():
     # Step 6: Summary report
     print("\n===== Normalization Summary =====")
     print(f"Output directory: {OUTPUT_DIR}")
-    print(f"Date cutoff: {datetime.fromtimestamp(cutoff_date)}")
+    print(f"Date cutoff (after April 30, 2025 to exclude out-of-range coordinates): {datetime.fromtimestamp(cutoff_date)}")
     
     print("\nFiltering statistics:")
     print(f"- JSON files: {len(json_files)} out of {len(all_json_files)} ({len(json_files)/len(all_json_files)*100:.2f}%)")
@@ -384,7 +432,6 @@ def main():
     
     print(f"\nTotal activity time: {activity_hours:.2f} hours")
     print("\nNormalization complete! The normalized data is ready for use.")
-    """
 
 if __name__ == "__main__":
     main()
