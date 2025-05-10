@@ -162,7 +162,7 @@ class KeystrokeRecorder:
         if not self.active:
             return
 
-        xi, yi = int(x), int(y)
+        xi, yi = int(x) / self.screen_width, int(y) / self.screen_height
 
         self.buffer.add_event({
             "event": "MOUSE",
