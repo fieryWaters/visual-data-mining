@@ -299,8 +299,9 @@ class DisplayWidget:
 
     def _save_prompt_to_log(self, prompt_txt):
         ts = time.strftime("%Y‑%m‑%d %H:%M:%S")
-        os.makedirs(os.path.dirname(f"{self.output_dir}/session_prompts.log"), exist_ok=True)
-        with open(f"{self.output_dir}/session_prompts.log", "a", encoding="utf‑8") as f:
+        prompt_file = os.path.join(self.collector.output_dir, "session_prompts.log")
+        os.makedirs(os.path.dirname(prompt_file), exist_ok=True)
+        with open(prompt_file, "a", encoding="utf‑8") as f:
             f.write(f"{ts}  {prompt_txt}\n")
 
 
@@ -864,8 +865,7 @@ if __name__ == "__main__":
     # Initialize collector and listeners first, before Tkinter
     print("Setting up data collection components first...")
 
-    # Use default directory with commit hash
-    collector = SimpleCollector(None)  # Will use default logs_[commit_hash] directory
+    collector = SimpleCollector(None)
     print(f"Using log directory: {collector.output_dir}")
 
     # Start recording components but keep them inactive
