@@ -299,7 +299,9 @@ class DisplayWidget:
 
     def _save_prompt_to_log(self, prompt_txt):
         ts = time.strftime("%Y‑%m‑%d %H:%M:%S")
-        with open("logs/session_prompts.log", "a", encoding="utf‑8") as f:
+        prompt_file = os.path.join(self.collector.output_dir, "session_prompts.log")
+        os.makedirs(os.path.dirname(prompt_file), exist_ok=True)
+        with open(prompt_file, "a", encoding="utf‑8") as f:
             f.write(f"{ts}  {prompt_txt}\n")
 
 
@@ -864,6 +866,7 @@ if __name__ == "__main__":
     print("Setting up data collection components first...")
 
     collector = SimpleCollector(None)
+    print(f"Using log directory: {collector.output_dir}")
 
     # Start recording components but keep them inactive
     print("Initializing recording components in inactive state...")

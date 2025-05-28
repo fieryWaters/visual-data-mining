@@ -6,28 +6,33 @@ Simplified data collector that integrates keystroke recording, sanitization, and
 import os
 import time
 import threading
+import subprocess
 from datetime import datetime
 
 from keystroke_recorder import KeystrokeRecorder
 from keystroke_sanitizer import KeystrokeSanitizer
 from screen_recorder import InMemoryScreenRecorder
 
+def get_commit_hash():
+    """Get the current git commit short hash"""
+    try:
+        result = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'],
+                               capture_output=True, text=True, check=True)
+        return result.stdout.strip()
+    except Exception:
+        return "unknown"
+
 class SimpleCollector:
     """Minimalist implementation of the data collection system"""
-    
-    def __init__(self, password, output_dir='logs'):
-        # Create directories
-        os.makedirs(output_dir, exist_ok=True)
-        
-        # Initialize components with shared password manager
+
+    def __init__(self, password):
+        commit_hash = get_commit_hash()
+        self.output_dir = os.path.join('logs', f'logs_{commit_hash}')
+        os.makedirs(self.output_dir, exist_ok=True)
+
         self.keystroke_recorder = KeystrokeRecorder(buffer_size=1000)
         self.keystroke_sanitizer = KeystrokeSanitizer(password)
         self.screen_recorder = InMemoryScreenRecorder(max_frames=300)
-        
-        # Initialize file paths
-        self.output_dir = output_dir
-        
-        # Internal state
         self.running = False
         self.stop_event = threading.Event()
         self.process_thread = None
@@ -42,25 +47,20 @@ class SimpleCollector:
     
     def _process_buffer(self):
         """Process keystroke buffer and save screenshots every 5 seconds"""
-        # Create required directories
         json_dir = os.path.join(self.output_dir, 'sanitized_json')
         screenshots_dir = os.path.join(self.output_dir, 'screenshots')
         os.makedirs(json_dir, exist_ok=True)
         os.makedirs(screenshots_dir, exist_ok=True)
         
-        # Session ID for filenames
         session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         buffer_count = 0
         
         while not self.stop_event.is_set():
             try:
-                # 1. Process keystrokes
                 events = self.keystroke_recorder.get_buffer_contents(clear=True)
                 if events:
-                    # Sanitize events
                     sanitized = self.keystroke_sanitizer.process_events(events)
                     
-                    # Save as JSON file
                     buffer_count += 1
                     json_filename = f"sanitized_{session_id}_{buffer_count:04d}.json"
                     json_path = os.path.join(json_dir, json_filename)
@@ -79,7 +79,6 @@ class SimpleCollector:
             except Exception as e:
                 print(f"Error in processing: {e}")
             
-            # Wait before next processing
             time.sleep(120)
     
     def start(self):
@@ -180,16 +179,16 @@ if __name__ == "__main__":
     # Simple usage example
     password = input("Enter encryption password: ")
     collector = SimpleCollector(password)
-    
+
     # Add test passwords
     collector.add_password("test_password1")
     collector.add_password("test_password2")
-    
+
     # Start collection
     collector.start()
-    
+
     try:
-        print("Recording... (Press Ctrl+C to stop)")
+        print(f"Recording to {collector.output_dir}... (Press Ctrl+C to stop)")
         while True:
             time.sleep(1)
     except KeyboardInterrupt:

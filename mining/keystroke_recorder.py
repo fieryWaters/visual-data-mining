@@ -56,6 +56,8 @@ class KeystrokeRecorder:
 
         # Get screen width and height
         self.screen_width, self.screen_height = pyautogui.size()
+        print(f"KeystrokeRecorder: PyAutoGUI reports screen size: {self.screen_width}x{self.screen_height}")
+        print(f"KeystrokeRecorder: Using pyautogui version: {pyautogui.__version__}")
 
 
     def on_key_press(self, key):
@@ -160,7 +162,7 @@ class KeystrokeRecorder:
         if not self.active:
             return
 
-        xi, yi = int(x), int(y)
+        xi, yi = int(x) / self.screen_width, int(y) / self.screen_height
 
         self.buffer.add_event({
             "event": "MOUSE",

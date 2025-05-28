@@ -12,8 +12,7 @@ from utils.fuzzy_matcher import FuzzyMatcher
 
 class KeystrokeSanitizer:
     
-    def __init__(self, password=None, keyfile=None, logs_dir="logs/sanitized_json"):
-        self.logs_dir = logs_dir
+    def __init__(self, password=None, keyfile=None):
         self.password_manager = KeePassManager.get_instance()
         
         if password:
@@ -193,10 +192,8 @@ class KeystrokeSanitizer:
             print("Error saving sanitized JSON")
             return False
     
-    def find_occurrences(self, custom_strings=None, logs_dir=None) -> Dict[str, int]:
-        search_dir = logs_dir or self.logs_dir
-        
-        log_files = self._get_log_files(search_dir)
+    def find_occurrences(self, custom_strings=None) -> Dict[str, int]:
+        log_files = self._get_all_log_files()
         if not log_files:
             return {}
             
@@ -217,8 +214,12 @@ class KeystrokeSanitizer:
                 
                 sanitized_data = self.process_events(events)
                 if sanitized_data["password_locations"]:
+                    # Extract session info from path (logs/logs_HASH/sanitized_json/filename.json)
+                    path_parts = file_path.split(os.sep)
+                    session_dir = next((p for p in path_parts if p.startswith('logs_')), 'unknown')
                     filename = os.path.basename(file_path)
-                    occurrences[filename] = len(sanitized_data["password_locations"])
+                    key = f"{session_dir}/{filename}"
+                    occurrences[key] = len(sanitized_data["password_locations"])
             
             except Exception as e:
                 print(f"Error processing file {file_path}: {e}")
@@ -231,10 +232,8 @@ class KeystrokeSanitizer:
                 
         return occurrences
     
-    def sanitize_logs(self, custom_strings=None, logs_dir=None) -> Dict[str, int]:
-        search_dir = logs_dir or self.logs_dir
-        
-        log_files = self._get_log_files(search_dir)
+    def sanitize_logs(self, custom_strings=None) -> Dict[str, int]:
+        log_files = self._get_all_log_files()
         if not log_files:
             return {}
             
@@ -257,8 +256,12 @@ class KeystrokeSanitizer:
                 
                 if sanitized_data["password_locations"]:
                     self._save_sanitized_data(file_path, sanitized_data)
+                    # Extract session info from path
+                    path_parts = file_path.split(os.sep)
+                    session_dir = next((p for p in path_parts if p.startswith('logs_')), 'unknown')
                     filename = os.path.basename(file_path)
-                    replacements[filename] = len(sanitized_data["password_locations"])
+                    key = f"{session_dir}/{filename}"
+                    replacements[key] = len(sanitized_data["password_locations"])
             
             except Exception as e:
                 print(f"Error sanitizing file {file_path}: {e}")
@@ -271,11 +274,16 @@ class KeystrokeSanitizer:
                 
         return replacements
     
-    def _get_log_files(self, logs_dir) -> List[str]:
-        if not os.path.exists(logs_dir):
-            return []
-            
-        return glob.glob(os.path.join(logs_dir, "*.json"))
+    def _get_all_log_files(self) -> List[str]:
+        all_files = []
+        log_dirs = glob.glob(os.path.join('logs', 'logs_*', 'sanitized_json'))
+        
+        for log_dir in log_dirs:
+            if os.path.exists(log_dir):
+                json_files = glob.glob(os.path.join(log_dir, '*.json'))
+                all_files.extend(json_files)
+                
+        return sorted(all_files)
     
     def _extract_events_from_log(self, file_path: str) -> List[Dict[str, Any]]:
         try:

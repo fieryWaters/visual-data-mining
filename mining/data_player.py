@@ -313,8 +313,11 @@ class DataPlayer:
         self.master.geometry("1200x800")
         self.master.minsize(800, 600)
         
-        # Set data directory
-        self.logs_dir = logs_dir or os.path.join(os.getcwd(), 'logs')
+        if not logs_dir:
+            log_dirs = sorted(glob.glob('logs/logs_*'), key=os.path.getmtime, reverse=True)
+            logs_dir = log_dirs[0] if log_dirs else 'logs'
+        
+        self.logs_dir = logs_dir
         self.screenshots_dir = os.path.join(self.logs_dir, 'screenshots')
         self.sanitized_dir = os.path.join(self.logs_dir, 'sanitized_json')
         
