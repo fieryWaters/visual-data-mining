@@ -76,8 +76,9 @@ else
         sleep 3
     done
     
-    # Give Jupyter a moment to write its files
-    sleep 5
+    # Wait for token to appear in jupyter_info file
+    echo "Waiting for Jupyter token..."
+    while ! ssh sfsu "grep -q token ~/.jupyter_info"; do sleep 5; echo "Still waiting..."; done
     
     # Get connection details
     CONNECTION_INFO=$(get_connection_details $JOB_ID)

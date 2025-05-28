@@ -75,6 +75,22 @@ class InMemoryScreenRecorder:
                     
                     # Take screenshot
                     screenshot = pyautogui.screenshot()
+                    
+                    # Resize to max 1120x1120 while preserving aspect ratio
+                    original_width, original_height = screenshot.size
+                    max_size = (1120, 1120)
+                    width_ratio = max_size[0] / original_width
+                    height_ratio = max_size[1] / original_height
+                    
+                    # Use the smaller ratio to ensure both dimensions fit within max_size
+                    resize_ratio = min(width_ratio, height_ratio)
+                    
+                    # Only resize if the image is larger than max_size
+                    if resize_ratio < 1:
+                        new_width = int(original_width * resize_ratio)
+                        new_height = int(original_height * resize_ratio)
+                        screenshot = screenshot.resize((new_width, new_height))
+                    
                     timestamp = datetime.now().isoformat()
                     
                     # Add to buffer with thread safety

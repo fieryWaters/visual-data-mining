@@ -7,8 +7,18 @@
 #SBATCH --job-name=slurm_jupyter
 #SBATCH --output=jupyter_%j.log  # %j is the job ID
 
-# Activate environment
-source ~/git-repos/visual-data-mining/venv/bin/activate
+# Ensure jupyter_venv exists before activating
+REPO_PATH=~/git-repos/visual-data-mining
+if [ ! -d "$REPO_PATH/jupyter_venv" ]; then
+    echo "Jupyter virtual environment not found, creating it now..."
+    cd $REPO_PATH
+    python3.11 -m venv jupyter_venv || python3 -m venv jupyter_venv
+    ./jupyter_venv/bin/pip install -r requirements.txt
+    ./jupyter_venv/bin/pip install jupyter notebook
+fi
+
+echo Activate environment
+source $REPO_PATH/jupyter_venv/bin/activate
 
 # Try to read previous port from jupyter_info file
 PREV_PORT=8888
