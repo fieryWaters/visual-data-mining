@@ -34,6 +34,11 @@ mining/integration_test/secret.keys
 mining/passwords.kdbx
 mining/**/passwords.kdbx
 
+# LLaMA Factory experiments
+training/llama_factory_experiments/LLaMA-Factory/
+training/llama_factory_experiments/llama-factory-venv/
+training/llama_factory_experiments/saves/
+
 # System files
 .DS_Store
 .vscode/
