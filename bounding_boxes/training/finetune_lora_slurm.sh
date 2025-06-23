@@ -28,7 +28,7 @@ echo "5. SCONTROL_CMD_DIR: $SCTRL_CMD_DIR"
 echo "Test Complete: concise_dir_test_output_${SLURM_JOB_ID}.txt"
 
 # Set up environment
-TRAINING_VENV_DIR=~/git-repos/visual-data-mining/training/training_venv
+TRAINING_VENV_DIR=~/git-repos/visual-data-mining/bounding_boxes/training/training_venv
 
 # Create venv if it doesn't exist
 if [ ! -d "$TRAINING_VENV_DIR" ]; then
@@ -40,7 +40,7 @@ source "$TRAINING_VENV_DIR/bin/activate"
 
 # Install uv and use it to install requirements
 pip install uv
-uv pip install -r ~/git-repos/visual-data-mining/training/training_requirements.txt
+uv pip install -r ~/git-repos/visual-data-mining/bounding_boxes/training/training_requirements.txt
 
 # Set up wandb run ID tracking
 if [ $JOB_NUM -eq 1 ]; then

@@ -72,7 +72,7 @@ def tokenize_dialogs(dialogs, images, processor):
 
 def get_custom_dataset(dataset_config, processor, split, split_ratio=0.8):
     # Load local dataset
-    dataset = load_from_disk('../data/processed/hf_click_image_dataset')
+    dataset = load_from_disk('../../computer_use/data/processed/hf_click_image_dataset')
     dataset = dataset.select(range(100))#testing
     dataset = dataset.train_test_split(test_size=1-split_ratio, shuffle=True, seed=42)[split]
 

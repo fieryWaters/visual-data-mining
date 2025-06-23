@@ -8,7 +8,7 @@
 
 # Ensure training_venv exists before activating
 REPO_PATH=~/git-repos/visual-data-mining
-TRAINING_VENV_DIR=$REPO_PATH/training/training_venv
+TRAINING_VENV_DIR=$REPO_PATH/bounding_boxes/training/training_venv
 
 if [ ! -d "$TRAINING_VENV_DIR" ]; then
     echo "Training virtual environment not found, creating it now..."
@@ -20,7 +20,7 @@ source "$TRAINING_VENV_DIR/bin/activate"
 
 # Install uv and use it to install requirements
 pip install uv
-uv pip install -r $REPO_PATH/training/training_requirements.txt
+uv pip install -r $REPO_PATH/bounding_boxes/training/training_requirements.txt
 uv pip install jupyter notebook
 
 echo Activate environment complete

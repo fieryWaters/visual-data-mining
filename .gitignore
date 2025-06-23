@@ -1,14 +1,15 @@
 data_player.exe
-training/.ipynb_checkpoints/
+bounding_boxes/training/.ipynb_checkpoints/
 *venv*
-training/llama-recipes
-training/__pycache__/
+*wandb*
+bounding_boxes/training/llama-recipes
+bounding_boxes/training/__pycache__/
 .ipynb_checkpoints/
 
 *.log
-training/wandb/
+bounding_boxes/training/wandb/
 finetuned_model/
-data_processing/synthetic_dataset/
+bounding_boxes/data_processing/synthetic_dataset/
 trained_model/
 
 # Data directories
@@ -16,28 +17,25 @@ data/
 data_processing/data/
 
 # Mining module
-mining/logs/
-mining/screenshots/
-mining/memory_captures/
-mining/__pycache__/
-mining/mining-venv/
-mining/*_captures/
-mining/*.log
-mining/.venv/
-mining/**/__pycache__/
-mining/utils/__pycache__/
-mining/tests/__pycache__/
-mining/test_output/
-mining/secret.keys
-mining/**/secret.keys
-mining/integration_test/secret.keys
-mining/passwords.kdbx
-mining/**/passwords.kdbx
+computer_use/mining/logs/
+computer_use/mining/__pycache__/
+computer_use/mining/*.log
+computer_use/mining/.venv/
+computer_use/mining/**/__pycache__/
+computer_use/mining/utils/__pycache__/
+computer_use/mining/tests/__pycache__/
+computer_use/mining/passwords.kdbx
+computer_use/mining/**/passwords.kdbx
+computer_use/mining/build/
+computer_use/mining/dist/
 
 # LLaMA Factory experiments
-training/llama_factory_experiments/LLaMA-Factory/
-training/llama_factory_experiments/llama-factory-venv/
-training/llama_factory_experiments/saves/
+computer_use/training/llama_factory_experiments/LLaMA-Factory/
+computer_use/training/llama_factory_experiments/llama-factory-venv/
+computer_use/training/llama_factory_experiments/saves/
+
+# Computer use data
+computer_use/data/processed/
 
 # System files
 .DS_Store
