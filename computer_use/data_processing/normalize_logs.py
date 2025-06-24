@@ -11,7 +11,12 @@ import pyautogui
 from tqdm import tqdm
 from datasets import Dataset
 
-def normalize_image_size(img, max_size=(1120, 1120)):
+# Configuration constants
+BUFFER_TIME_SECONDS = 15  # Time buffer around keystrokes for screenshot filtering
+SESSION_GAP_THRESHOLD = 900  # 15 minutes gap to identify sessions
+MAX_IMAGE_SIZE = (1120, 1120)  # Maximum image dimensions
+
+def normalize_image_size(img, max_size=MAX_IMAGE_SIZE):
     original_width, original_height = img.size
     resize_ratio = min(max_size[0] / original_width, max_size[1] / original_height)
     return img.resize((int(original_width * resize_ratio), int(original_height * resize_ratio)), Image.Resampling.LANCZOS) if resize_ratio < 1 else img
@@ -34,7 +39,7 @@ def merge_time_ranges(ranges):
             merged.append(current)
     return merged
 
-def identify_sessions(event_timestamps, gap_threshold=900):
+def identify_sessions(event_timestamps, gap_threshold=SESSION_GAP_THRESHOLD):
     if not event_timestamps:
         return []
     sorted_timestamps = sorted(event_timestamps)
@@ -103,36 +108,33 @@ def process_json_file(filepath, output_dir, norm_width, norm_height):
         "events_normalized": events_normalized
     }
 
-def main():
-    # Configuration
-    screen_width, screen_height = pyautogui.size()
+def process_single_folder(raw_folder_path, output_folder_path, screen_width, screen_height, pbar=None):
+    """Process a single raw data folder and create filtered output."""
+    folder_name = os.path.basename(raw_folder_path)
+    print(f"\n{'='*60}")
+    print(f"Processing folder: {folder_name}")
+    print(f"{'='*60}")
     
-    # Define paths
-    ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    MINING_DIR = os.path.join(ROOT_DIR, 'mining')
-    LOGS_DIR = os.path.join(MINING_DIR, 'logs_jacob_may_6_2025')
-    SCREENSHOTS_DIR = os.path.join(LOGS_DIR, 'screenshots')
-    JSON_DIR = os.path.join(LOGS_DIR, 'sanitized_json')
+    # Define input paths
+    SCREENSHOTS_DIR = os.path.join(raw_folder_path, 'screenshots')
+    JSON_DIR = os.path.join(raw_folder_path, 'sanitized_json')
     
-    # Generate distinctive output folder name
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    hostname = socket.gethostname().replace(".", "_")
-    OUTPUT_DIR = os.path.join(ROOT_DIR, 'data', f"normalized_{hostname}_{timestamp}")
-    OUTPUT_SCREENSHOTS_DIR = os.path.join(OUTPUT_DIR, 'screenshots')
-    OUTPUT_JSON_DIR = os.path.join(OUTPUT_DIR, 'sanitized_json')
+    # Define output paths
+    OUTPUT_SCREENSHOTS_DIR = os.path.join(output_folder_path, 'screenshots')
+    OUTPUT_JSON_DIR = os.path.join(output_folder_path, 'sanitized_json')
     
     # Create output directories
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(output_folder_path, exist_ok=True)
     os.makedirs(OUTPUT_SCREENSHOTS_DIR, exist_ok=True)
     os.makedirs(OUTPUT_JSON_DIR, exist_ok=True)
     
-    print("Loading list of keystroke")
+    print("Loading list of keystroke files...")
     all_json_files = glob.glob(os.path.join(JSON_DIR, "*.json"))
-    json_files = all_json_files  # No date filtering
+    json_files = all_json_files
 
-    print("Loading list of screenshots files")
+    print("Loading list of screenshot files...")
     all_screenshot_files = glob.glob(os.path.join(SCREENSHOTS_DIR, "*.jpg"))
-    screenshot_files = all_screenshot_files  # No date filtering
+    screenshot_files = all_screenshot_files
     
     print(f"Found files:")
     print(f"- JSON files: {len(json_files)}")
@@ -209,8 +211,8 @@ def main():
     # Step 6: Create time ranges for valid activity (for screenshot filtering)
     print("Creating activity time ranges for valid sessions...")
     
-    # Create time ranges with buffer (15 seconds before and after each event)
-    buffer_seconds = 15
+    # Create time ranges with buffer around each event
+    buffer_seconds = BUFFER_TIME_SECONDS
     activity_ranges = []
     
     # Only include timestamps from valid sessions
@@ -288,6 +290,10 @@ def main():
         desc="Processing JSON files"
     )
     
+    # Update progress bar for JSON files
+    if pbar:
+        pbar.update(len(valid_json_files))
+    
     # Extract statistics
     success_json = sum(1 for result in json_results if result["status"] == "success")
     error_json = sum(1 for result in json_results if result["status"] == "error")
@@ -364,11 +370,49 @@ def main():
         batched=False,
         desc="Processing screenshots"
     )
+    
+    # Update progress bar for screenshots
+    if pbar:
+        pbar.update(len(activity_filtered_screenshots))
 
     # Copy session_prompts.log if it exists
-    session_prompts_path = os.path.join(LOGS_DIR, "session_prompts.log")
+    session_prompts_path = os.path.join(raw_folder_path, "session_prompts.log")
     if os.path.exists(session_prompts_path):
-        shutil.copy2(session_prompts_path, os.path.join(OUTPUT_DIR, "session_prompts.log"))
+        shutil.copy2(session_prompts_path, os.path.join(output_folder_path, "session_prompts.log"))
+
+def main():
+    screen_width, screen_height = pyautogui.size()
+    
+    ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    RAW_DATA_DIR = os.path.join(ROOT_DIR, 'data', 'raw')
+    FILTERED_DATA_DIR = os.path.join(ROOT_DIR, 'data', 'filtered')
+    
+    raw_folders = [d for d in os.listdir(RAW_DATA_DIR) 
+                   if os.path.isdir(os.path.join(RAW_DATA_DIR, d))]
+    
+    os.makedirs(FILTERED_DATA_DIR, exist_ok=True)
+    
+    # Calculate total files across all folders for progress tracking
+    total_files = 0
+    for folder_name in raw_folders:
+        raw_folder_path = os.path.join(RAW_DATA_DIR, folder_name)
+        screenshots_dir = os.path.join(raw_folder_path, 'screenshots')
+        json_dir = os.path.join(raw_folder_path, 'sanitized_json')
+        
+        if os.path.exists(screenshots_dir):
+            total_files += len(glob.glob(os.path.join(screenshots_dir, "*.jpg")))
+        if os.path.exists(json_dir):
+            total_files += len(glob.glob(os.path.join(json_dir, "*.json")))
+    
+    print(f"Total files to process: {total_files}")
+    
+    with tqdm(total=total_files, desc="Processing all files") as pbar:
+        for folder_name in raw_folders:
+            raw_folder_path = os.path.join(RAW_DATA_DIR, folder_name)
+            output_folder_name = folder_name.replace('logs_', 'filtered_', 1)
+            output_folder_path = os.path.join(FILTERED_DATA_DIR, output_folder_name)
+            
+            process_single_folder(raw_folder_path, output_folder_path, screen_width, screen_height, pbar)
 
 if __name__ == "__main__":
     main()

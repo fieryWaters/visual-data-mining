@@ -27,7 +27,7 @@ class SimpleCollector:
 
     def __init__(self, password):
         commit_hash = get_commit_hash()
-        self.output_dir = os.path.join('logs', f'logs_{commit_hash}')
+        self.output_dir = os.path.join('..', 'data', 'raw', f'logs_{commit_hash}')
         os.makedirs(self.output_dir, exist_ok=True)
 
         self.keystroke_recorder = KeystrokeRecorder(buffer_size=1000)
