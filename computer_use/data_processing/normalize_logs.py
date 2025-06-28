@@ -249,7 +249,10 @@ def process_single_folder(raw_folder_path, output_folder_path, screen_width, scr
             activity_filtered_screenshots.append(filepath)
     
     print(f"Screenshots after valid activity filter: {len(activity_filtered_screenshots)} out of {len(screenshot_files)}")
-    print(f"Final retention rate: {len(activity_filtered_screenshots)/len(all_screenshot_files)*100:.2f}% of all screenshots")
+    if len(all_screenshot_files) > 0:
+        print(f"Final retention rate: {len(activity_filtered_screenshots)/len(all_screenshot_files)*100:.2f}% of all screenshots")
+    else:
+        print("Final retention rate: N/A (no screenshots found)")
     
     # Step 7: Filter JSON files to only those in valid sessions
     print("Filtering JSON files to only include those in valid sessions...")
@@ -280,7 +283,7 @@ def process_single_folder(raw_folder_path, output_folder_path, screen_width, scr
     print(f"Using normalization dimensions: {norm_width}x{norm_height}")
     
     # Process JSON files
-    num_cores = max(1, os.cpu_count() // 2)
+    num_cores = max(1, os.cpu_count() -1)
     json_dataset = Dataset.from_dict({"filepath": valid_json_files})
     
     json_results = json_dataset.map(
@@ -358,7 +361,7 @@ def process_single_folder(raw_folder_path, output_folder_path, screen_width, scr
     # Step 9: Process filtered screenshots - resize and save
     print("\nProcessing filtered screenshots...")
     print(f"- Screenshots to process: {len(activity_filtered_screenshots)}")
-    print(f"- Output directory: {OUTPUT_DIR}")
+    print(f"- Output directory: {OUTPUT_SCREENSHOTS_DIR}")
 
     # Create dataset for parallel processing
     screenshots_dataset = Dataset.from_dict({"filepath": activity_filtered_screenshots})

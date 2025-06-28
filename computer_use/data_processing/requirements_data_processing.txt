@@ -1,0 +1,7 @@
+Pillow
+pyautogui
+tqdm
+datasets
+IPython
+torch
+torchvision
