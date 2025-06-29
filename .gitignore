@@ -37,6 +37,13 @@ computer_use/training/llama_factory_experiments/saves/
 # Computer use data
 computer_use/data/processed/
 
+# UV/Python version files
+.python-version
+uv.lock
+
+# LLaMA Factory saves
+saves/
+
 # System files
 .DS_Store
 .vscode/

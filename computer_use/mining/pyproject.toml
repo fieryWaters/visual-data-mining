@@ -1,0 +1,19 @@
+[project]
+name = "mining"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography==43.0.3",
+    "fire==0.5.0",
+    "ipykernel>=6.29.5",
+    "jupyter>=1.1.1",
+    "numpy==1.26.4",
+    "opencv-python==4.10.0.84",
+    "pillow==11.0.0",
+    "pyautogui==0.9.54",
+    "pykeepass==4.1.1.post1",
+    "pynput==1.7.5",
+    "python-dateutil==2.8.2",
+]
